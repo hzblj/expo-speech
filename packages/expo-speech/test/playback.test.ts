@@ -103,3 +103,29 @@ test('new items take effect at once', () => {
   follower.setItems(words)
   assert.deepEqual(changes, [1])
 })
+
+test('once the last word has ended, every word is said and none is current', () => {
+  const time = fakeTime()
+  const changes: number[] = []
+  const timed = [
+    {end: 0.9, start: 0.5},
+    {end: 1.4, start: 1},
+  ]
+  const follower = new PlaybackFollower(timed, index => changes.push(index), time.options)
+
+  follower.report({playing: true, rate: 1, time: 1.2})
+  assert.deepEqual(changes, [1])
+
+  // Woken when the last word ends, not left on it.
+  time.advance(201)
+  assert.deepEqual(changes, [1, 2])
+  assert.equal(time.pending, 0)
+
+  // A seek back makes it current again.
+  follower.report({time: 1.1})
+  assert.deepEqual(changes, [1, 2, 1])
+
+  // A player stopped at its end reports a time past the last word.
+  follower.report({playing: false, time: 3})
+  assert.deepEqual(changes, [1, 2, 1, 2])
+})

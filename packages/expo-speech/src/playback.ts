@@ -23,12 +23,17 @@ export type PlaybackFollowerOptions = {
   clearTimeout?: (handle: unknown) => void
 }
 
+/** A timed item: a word or a segment. Without an `end`, the last one stays current to the end of the audio. */
+type Timed = {start: number; end?: number}
+
 /**
- * Follows a player through a list of timed items (words or segments) and calls back when the current one changes.
+ * Follows a player through a list of timed items (words or segments) and calls back when the current one changes:
+ * `-1` before the first, the item being said (or the last said, in a pause between two), and the number of items once
+ * the last has ended, when everything has been said.
  *
  * Players report their time a few times a second (expo-audio every 500 ms by default), too seldom for words. The
- * follower takes the last report, its moment and the playback rate, and wakes itself exactly when the next item starts,
- * so the highlight moves on time without polling. Every new report sets the clock right again.
+ * follower takes the last report, its moment and the playback rate, and wakes itself exactly when the next item starts
+ * (or the last one ends), so the highlight moves on time without polling. Every new report sets the clock right again.
  */
 export class PlaybackFollower {
   private clock: Clock = {at: 0, playing: false, rate: 1, time: 0}
@@ -39,7 +44,7 @@ export class PlaybackFollower {
   private readonly cancel: (handle: unknown) => void
 
   constructor(
-    private starts: readonly {start: number}[],
+    private starts: readonly Timed[],
     private readonly onChange: (index: number, time: number) => void,
     private readonly options: PlaybackFollowerOptions = {}
   ) {
@@ -73,7 +78,7 @@ export class PlaybackFollower {
   }
 
   /** New items, for a transcript that grew while it plays. */
-  setItems(starts: readonly {start: number}[]) {
+  setItems(starts: readonly Timed[]) {
     this.starts = starts
     this.tick()
   }
@@ -89,18 +94,21 @@ export class PlaybackFollower {
     this.dispose()
 
     const time = this.time + (this.options.offset ?? 0)
-    const index = indexAt(this.starts, time)
+    const last = this.starts[this.starts.length - 1]
+    const ended = last?.end !== undefined && time >= last.end
+    const index = ended ? this.starts.length : indexAt(this.starts, time)
 
     if (index !== this.index) {
       this.index = index
       this.onChange(index, time)
     }
 
-    const next = this.starts[index + 1]
+    // The next item's start, or the end of the last one.
+    const next = this.starts[index + 1]?.start ?? (index === this.starts.length - 1 ? last?.end : undefined)
 
-    if (this.clock.playing && this.clock.rate > 0 && next) {
+    if (this.clock.playing && this.clock.rate > 0 && next !== undefined) {
       // A millisecond late rather than early, so the wake-up lands on the next item.
-      this.timer = this.schedule(this.tick, Math.max(0, ((next.start - time) / this.clock.rate) * 1000 + 1))
+      this.timer = this.schedule(this.tick, Math.max(0, ((next - time) / this.clock.rate) * 1000 + 1))
     }
   }
 }

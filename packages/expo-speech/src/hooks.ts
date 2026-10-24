@@ -180,9 +180,14 @@ export const useTranscribe = (
 }
 
 export type TranscriptPlayback = {
-  /** The word being said (or last said), or -1 before the first. */
+  /**
+   * The word being said (or the last said, in a pause): -1 before the first, and the number of words once the last has
+   * ended, when every word has been said and none is active. `TranscriptText` takes it as it is.
+   */
   wordIndex: number
+  /** The word at `wordIndex`; `null` before the first and after the last. */
   word: TranscriptWord | null
+  /** The segment of that word: -1 before the first, the number of segments after the last. */
   segmentIndex: number
   segment: TranscriptSegment | null
   /** The player's time when the word changed. */
@@ -231,8 +236,15 @@ export const useTranscriptPlayback = (
     follower.current?.setItems(words ?? [])
   }, [words])
 
-  const word = words?.[state.index] ?? null
-  const segmentIndex = word && transcript ? indexAt(transcript.segments, word.start) : -1
+  const count = words?.length ?? 0
+  const wordIndex = state.index >= count && count > 0 ? count : state.index < count ? state.index : -1
+  const word = words?.[wordIndex] ?? null
+  const segmentIndex =
+    wordIndex === count && count > 0
+      ? (transcript?.segments.length ?? 0)
+      : word && transcript
+        ? indexAt(transcript.segments, word.start)
+        : -1
 
   return {
     getTime: () => (follower.current?.time ?? 0) + offset,
@@ -240,6 +252,6 @@ export const useTranscriptPlayback = (
     segmentIndex,
     time: state.time,
     word,
-    wordIndex: word ? state.index : -1,
+    wordIndex,
   }
 }
