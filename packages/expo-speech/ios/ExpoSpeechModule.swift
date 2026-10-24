@@ -223,6 +223,10 @@ enum Permissions {
     }
   }
 
+  static var microphoneDenied: Bool {
+    microphoneStatus() == "denied"
+  }
+
   private static func microphoneStatus() -> String {
     if #available(iOS 17.0, *) {
       switch AVAudioApplication.shared.recordPermission {

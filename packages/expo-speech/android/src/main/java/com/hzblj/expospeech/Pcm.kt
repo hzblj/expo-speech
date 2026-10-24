@@ -117,11 +117,13 @@ fun levelOf(samples: ShortArray, length: Int = samples.size): Double {
 
 /** A mono 16-bit WAV file written as samples come; the header is completed on `close`. */
 class WavWriter(file: File, private val sampleRate: Int = RECOGNIZER_SAMPLE_RATE) {
-  private val output = RandomAccessFile(file, "rw")
+  private val output: RandomAccessFile
   private var bytes = 0L
 
   init {
+    // The folder first: opening a file in a folder that isn't there throws.
     file.parentFile?.mkdirs()
+    output = RandomAccessFile(file, "rw")
     output.setLength(0)
     output.write(header(0))
   }

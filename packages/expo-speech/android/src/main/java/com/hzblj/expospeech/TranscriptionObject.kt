@@ -95,12 +95,13 @@ class TranscriptionObject(
       engine.run(
         EngineAudio.Stream(
           // A new decoder per feed: a session the service dropped before it started is fed again from the start.
-          feed = { write ->
-            AudioDecoder(local, options.rangeStart, options.rangeEnd).decode { samples, _ ->
+          feed = { from, write ->
+            AudioDecoder(local, from, options.rangeEnd).decode { samples, _ ->
               write(samples)
               !cancelRequested
             }
           },
+          isFile = true,
           offset = range.start,
           duration = if (decoder.duration > 0) minOf(range.endInclusive, decoder.duration) - range.start else null
         ),
@@ -123,7 +124,7 @@ class TranscriptionObject(
           capture = microphone
           assembler.audioUri = recording?.let { android.net.Uri.fromFile(it).toString() }
         }
-        engine.run(EngineAudio.Stream(feed = { write -> microphone.capture(write) }), this)
+        engine.run(EngineAudio.Stream(feed = { _, write -> microphone.capture(write) }, isFile = false), this)
         synchronized(lock) { assembler.duration = microphone.duration }
       } else {
         val stopped = CompletableDeferred<Unit>()

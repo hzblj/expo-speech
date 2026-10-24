@@ -293,6 +293,8 @@ export type SpeechErrorCode =
   | 'interrupted'
   /** The recognition service failed. */
   | 'service'
+  /** `cancel()`, or the transcriber was released: what `wait()` rejects with. */
+  | 'cancelled'
   | 'unknown'
 
 export type SpeechError = {code: SpeechErrorCode; message: string}

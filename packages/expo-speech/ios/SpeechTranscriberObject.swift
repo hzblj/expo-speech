@@ -16,7 +16,8 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
   private let requestedLocale: String
   private let lock = NSLock()
   private var resolvedLocale: String?
-  private var queue: [TranscriptionObject] = []
+  /// Waiting transcriptions with their sources, highest priority first.
+  private var queue: [(transcription: TranscriptionObject, uri: String, options: TranscribeOptions)] = []
   private var running: [TranscriptionObject] = []
   private var order = 0
 
@@ -64,14 +65,16 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
     let locale = self.locale
 
     let transcription = lock.withLock { () -> TranscriptionObject in
-      if let key = slot?.key, let existing = (running + queue).first(where: { $0.cacheKey == key }) {
+      if let key = slot?.key, let existing = (running + queue.map(\.transcription)).first(where: { $0.cacheKey == key }) {
         return existing
       }
       order += 1
       return TranscriptionObject(kind: .file, locale: locale, cacheSlot: slot, priority: priority, order: order)
     }
 
-    if transcription.state != .queued || lock.withLock({ (running + queue).contains { $0 === transcription } }) {
+    if transcription.state != .queued
+      || lock.withLock({ (running + queue.map(\.transcription)).contains { $0 === transcription } })
+    {
       return transcription
     }
 
@@ -85,11 +88,12 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
     transcription.onSettled = { [weak self] settled in
       self?.remove(settled)
     }
+    // Queued with its source in one step: a pump on another thread never finds one without the other.
     lock.withLock {
-      queue.append(transcription)
-      queue.sort { ($0.priority, -$0.order) > ($1.priority, -$1.order) }
+      queue.append((transcription, uri, transcribeOptions))
+      queue.sort { ($0.transcription.priority, -$0.transcription.order) > ($1.transcription.priority, -$1.transcription.order) }
     }
-    pump(uri: uri, options: transcribeOptions, for: transcription)
+    pump()
     return transcription
   }
 
@@ -99,26 +103,15 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
     return options.fingerprint + ";" + range
   }
 
-  /// Where each queued transcription's source is: kept apart from the object, which JavaScript reads.
-  private var sources: [ObjectIdentifier: (String, TranscribeOptions)] = [:]
-
-  private func pump(uri: String, options transcribeOptions: TranscribeOptions, for transcription: TranscriptionObject) {
-    lock.withLock { sources[ObjectIdentifier(transcription)] = (uri, transcribeOptions) }
-    pump()
-  }
-
   private func pump() {
     while true {
       let next = lock.withLock { () -> (TranscriptionObject, String, TranscribeOptions)? in
         guard running.count < options.maxConcurrent, !queue.isEmpty else {
           return nil
         }
-        let transcription = queue.removeFirst()
-        running.append(transcription)
-        guard let (uri, transcribeOptions) = sources.removeValue(forKey: ObjectIdentifier(transcription)) else {
-          return nil
-        }
-        return (transcription, uri, transcribeOptions)
+        let entry = queue.removeFirst()
+        running.append(entry.transcription)
+        return (entry.transcription, entry.uri, entry.options)
       }
       guard let (transcription, uri, transcribeOptions) = next else {
         return
@@ -129,9 +122,8 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
 
   private func remove(_ transcription: TranscriptionObject) {
     lock.withLock {
-      queue.removeAll { $0 === transcription }
+      queue.removeAll { $0.transcription === transcription }
       running.removeAll { $0 === transcription }
-      sources.removeValue(forKey: ObjectIdentifier(transcription))
     }
     pump()
   }
@@ -139,6 +131,10 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
   // MARK: Microphone
 
   func listen(options listenOptions: ListenOptions) throws -> TranscriptionObject {
+    // Denied, the microphone records silence: a transcription that never hears anything, rather than an error.
+    if Permissions.microphoneDenied {
+      throw SpeechException(SpeechFailure(.permissionDenied, "The microphone is not allowed"))
+    }
     let locale = self.locale
     let transcription = try Self.microphone.withLock { () throws -> TranscriptionObject in
       if let current = Self.listening, !current.state.isSettled {
@@ -153,7 +149,7 @@ final class SpeechTranscriberObject: SharedObject, @unchecked Sendable {
   }
 
   func cancelAll() {
-    let all = lock.withLock { queue + running }
+    let all = lock.withLock { queue.map(\.transcription) + running }
     for transcription in all {
       transcription.cancel()
     }

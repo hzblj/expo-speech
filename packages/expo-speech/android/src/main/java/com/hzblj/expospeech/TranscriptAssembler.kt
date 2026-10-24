@@ -190,7 +190,8 @@ class TranscriptAssembler(val locale: String, finals: List<TranscriptSegment> = 
       finalLength += segment.text.length
       appended.add(segment)
     }
-    if (appended.isNotEmpty()) {
+    // Any final result settles what was volatile, an empty one too: the recognizer took that text back.
+    if (results.isNotEmpty()) {
       currentVolatile = null
     }
     return appended

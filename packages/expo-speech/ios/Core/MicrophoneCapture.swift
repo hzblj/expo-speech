@@ -6,6 +6,9 @@ import Foundation
 /// Survives a change of route (AirPods in or out): the input's format changes with it, so the tap is installed again
 /// with a new converter, where a fixed converter would crash. A call or another app taking the session ends the
 /// stream early instead of leaving it silent; `wasInterrupted` tells the two endings apart.
+///
+/// `stop` may come at any time, from any thread: before `start` (the stream it returns is already over and the
+/// microphone never opens), during it (it tears down once the engine runs), or after.
 public final class MicrophoneCapture: @unchecked Sendable {
   public struct Configuration: Sendable {
     public var recordURL: URL?
@@ -23,9 +26,14 @@ public final class MicrophoneCapture: @unchecked Sendable {
     }
   }
 
+  private enum Phase {
+    case idle, starting, running, stopped
+  }
+
   private let configuration: Configuration
   private let engine = AVAudioEngine()
   private let lock = NSLock()
+  private var phase = Phase.idle
   private var format: AVAudioFormat?
   private var converter: AVAudioConverter?
   private var file: AVAudioFile?
@@ -33,11 +41,10 @@ public final class MicrophoneCapture: @unchecked Sendable {
   private var frames: AVAudioFramePosition = 0
   private var lastVolume = Date.distantPast
   private var observers: [NSObjectProtocol] = []
-  private var running = false
+  private var interrupted = false
 
   /// The level in dBFS, every `volumeInterval`.
   public var onVolume: (@Sendable (Float) -> Void)?
-  public private(set) var wasInterrupted = false
 
   public init(_ configuration: Configuration) {
     self.configuration = configuration
@@ -48,15 +55,33 @@ public final class MicrophoneCapture: @unchecked Sendable {
     lock.withLock { format.map { Double(frames) / $0.sampleRate } ?? 0 }
   }
 
+  /// Whether a call or another app ended the capture, rather than `stop`.
+  public var wasInterrupted: Bool {
+    lock.withLock { interrupted }
+  }
+
   /// Starts capturing. Chunks come in `format`, timed from the start of the capture.
   public func start(format: AVAudioFormat) throws -> AsyncThrowingStream<AudioChunk, Error> {
     let (stream, continuation) = AsyncThrowingStream<AudioChunk, Error>.makeStream(bufferingPolicy: .unbounded)
 
-    lock.withLock {
+    let proceed = lock.withLock { () -> Bool in
+      guard phase == .idle else {
+        return false
+      }
+      phase = .starting
       self.format = format
       self.continuation = continuation
       self.frames = 0
-      self.running = true
+      return true
+    }
+    // Stopped before it started: nothing to open.
+    guard proceed else {
+      continuation.finish()
+      return stream
+    }
+
+    continuation.onTermination = { [weak self] _ in
+      self?.stop()
     }
 
     do {
@@ -78,9 +103,8 @@ public final class MicrophoneCapture: @unchecked Sendable {
         try engine.inputNode.setVoiceProcessingEnabled(true)
       }
       if let url = configuration.recordURL {
-        try FileManager.default.createDirectory(
-          at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        file = try AVAudioFile(
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let recording = try AVAudioFile(
           forWriting: url,
           settings: [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -91,23 +115,38 @@ public final class MicrophoneCapture: @unchecked Sendable {
             AVLinearPCMIsBigEndianKey: false,
           ],
           commonFormat: format.commonFormat, interleaved: format.isInterleaved)
+        lock.withLock { file = recording }
       }
 
       try installTap()
       engine.prepare()
       try engine.start()
 
-      observers.append(
-        NotificationCenter.default.addObserver(
-          forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
-        ) { [weak self] _ in
-          self?.restart()
-        })
+      let observer = NotificationCenter.default.addObserver(
+        forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+      ) { [weak self] _ in
+        self?.restart()
+      }
+      lock.withLock { observers.append(observer) }
     } catch {
-      finish(throwing: SpeechFailure(.audio, "The microphone could not start: \(error.localizedDescription)"))
-      throw SpeechFailure(.audio, "The microphone could not start: \(error.localizedDescription)")
+      let failure = SpeechFailure(.audio, "The microphone could not start: \(error.localizedDescription)")
+      lock.withLock { phase = .running }
+      finish(throwing: failure)
+      throw failure
     }
 
+    // A stop that came while the engine started found nothing to stop: it is honoured now.
+    let stoppedMeanwhile = lock.withLock { () -> Bool in
+      if phase == .stopped {
+        return true
+      }
+      phase = .running
+      return false
+    }
+    if stoppedMeanwhile {
+      tearDown()
+      continuation.finish()
+    }
     return stream
   }
 
@@ -137,7 +176,7 @@ public final class MicrophoneCapture: @unchecked Sendable {
   }
 
   private func restart() {
-    guard lock.withLock({ running }) else {
+    guard lock.withLock({ phase == .running }) else {
       return
     }
     engine.inputNode.removeTap(onBus: 0)
@@ -181,10 +220,10 @@ public final class MicrophoneCapture: @unchecked Sendable {
       return
     }
 
-    let start = lock.withLock { () -> CMTime in
+    let (start, file) = lock.withLock { () -> (CMTime, AVAudioFile?) in
       let start = CMTime(value: frames, timescale: CMTimeScale(format.sampleRate))
       frames += AVAudioFramePosition(output.frameLength)
-      return start
+      return (start, self.file)
     }
 
     try? file?.write(from: output)
@@ -197,11 +236,16 @@ public final class MicrophoneCapture: @unchecked Sendable {
     }
 
     let now = Date()
-
-    guard now.timeIntervalSince(lastVolume) >= configuration.volumeInterval else {
+    let due = lock.withLock { () -> Bool in
+      guard now.timeIntervalSince(lastVolume) >= configuration.volumeInterval else {
+        return false
+      }
+      lastVolume = now
+      return true
+    }
+    guard due else {
       return
     }
-    lastVolume = now
 
     let count = Int(buffer.frameLength)
     var sum: Float = 0
@@ -213,64 +257,79 @@ public final class MicrophoneCapture: @unchecked Sendable {
   }
 
   private func finish(throwing error: Error?) {
-    let continuation = lock.withLock { () -> AsyncThrowingStream<AudioChunk, Error>.Continuation? in
-      guard running else {
-        return nil
+    let (continuation, wasRunning) = lock.withLock { () -> (AsyncThrowingStream<AudioChunk, Error>.Continuation?, Bool) in
+      switch phase {
+      case .stopped:
+        return (nil, false)
+      case .idle, .starting:
+        // `start` notices and finishes the stream itself once its engine runs; before it, there is nothing to stop.
+        phase = .stopped
+        return (nil, false)
+      case .running:
+        phase = .stopped
+        let continuation = self.continuation
+        self.continuation = nil
+        return (continuation, true)
       }
-      running = false
-      let continuation = self.continuation
-      self.continuation = nil
-      return continuation
     }
 
-    guard let continuation else {
+    guard wasRunning else {
       return
     }
 
+    tearDown()
+
+    if let error {
+      continuation?.finish(throwing: error)
+    } else {
+      continuation?.finish()
+    }
+  }
+
+  /// Stops the engine and lets go of the session, the file and the observers.
+  private func tearDown() {
     engine.inputNode.removeTap(onBus: 0)
     engine.stop()
+
+    let observers = lock.withLock { () -> [NSObjectProtocol] in
+      let observers = self.observers
+      self.observers = []
+      file = nil
+      continuation = nil
+      return observers
+    }
     for observer in observers {
       NotificationCenter.default.removeObserver(observer)
     }
-    observers = []
-    file = nil
 
     #if os(iOS)
       if configuration.managesAudioSession {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
       }
     #endif
-
-    if let error {
-      continuation.finish(throwing: error)
-    } else {
-      continuation.finish()
-    }
   }
 
   #if os(iOS)
     private func observeSession() {
       let center = NotificationCenter.default
-
-      observers.append(
-        center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) {
-          [weak self] notification in
-          guard
-            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-            AVAudioSession.InterruptionType(rawValue: raw) == .began
-          else {
-            return
-          }
-          // End the stream as if stopped: what was heard is still finalized.
-          self?.wasInterrupted = true
-          self?.finish(throwing: nil)
-        })
-      observers.append(
-        center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil) {
-          [weak self] _ in
-          self?.wasInterrupted = true
-          self?.finish(throwing: nil)
-        })
+      let interruption = center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) {
+        [weak self] notification in
+        guard
+          let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+          AVAudioSession.InterruptionType(rawValue: raw) == .began
+        else {
+          return
+        }
+        // End the stream as if stopped: what was heard is still finalized.
+        self?.lock.withLock { self?.interrupted = true }
+        self?.finish(throwing: nil)
+      }
+      let reset = center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil) {
+        [weak self] _ in
+        self?.lock.withLock { self?.interrupted = true }
+        self?.finish(throwing: nil)
+      }
+      lock.withLock { observers.append(contentsOf: [interruption, reset]) }
     }
   #endif
 }

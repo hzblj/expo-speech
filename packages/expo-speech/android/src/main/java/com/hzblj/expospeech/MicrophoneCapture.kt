@@ -52,11 +52,11 @@ class MicrophoneCapture(
       throw SpeechFailure(SpeechFailure.AUDIO, "The microphone could not be opened")
     }
 
-    writer = recording?.let { WavWriter(it) }
     val buffer = ShortArray(RECOGNIZER_SAMPLE_RATE / 10)
     var samples = 0L
     var lastVolume = 0L
     try {
+      writer = recording?.let { WavWriter(it) }
       record.startRecording()
       while (!stopped && coroutineContext.isActive) {
         val read = record.read(buffer, 0, buffer.size)

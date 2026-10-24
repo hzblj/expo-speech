@@ -62,8 +62,10 @@ public enum TranscriptCache {
     return nil
   }
 
-  public static func write(_ transcript: Transcript, key: String, engine: String, fingerprint: String) {
-    let url = url(key: key, locale: transcript.locale, engine: engine, fingerprint: fingerprint)
+  /// Keyed by the locale the transcription was asked for, which is what a read knows; the transcript's own may be the
+  /// engine's resolved equivalent.
+  public static func write(_ transcript: Transcript, key: String, locale: String, engine: String, fingerprint: String) {
+    let url = url(key: key, locale: locale, engine: engine, fingerprint: fingerprint)
     try? FileManager.default.createDirectory(at: SpeechStorage.transcripts, withIntermediateDirectories: true)
     if let data = try? JSONEncoder().encode(transcript) {
       try? data.write(to: url, options: .atomic)
@@ -71,19 +73,27 @@ public enum TranscriptCache {
   }
 }
 
-/// Remote audio, downloaded once per URL and kept in Caches. Concurrent requests for one URL share the download.
+/// Remote audio, downloaded once per URL and kept in Caches. Concurrent requests for one URL share the download; a
+/// request that is cancelled leaves at once, and the download stops when nobody waits for it any more.
 public final class AudioDownloads: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
   public static let shared = AudioDownloads()
 
+  private struct Waiter {
+    var continuation: CheckedContinuation<URL, Error>
+    var progress: (Double) -> Void
+  }
+
   private struct Pending {
     var destination: URL
-    var continuations: [CheckedContinuation<URL, Error>]
-    var progress: [(Double) -> Void]
+    var task: URLSessionDownloadTask?
+    var waiters: [UUID: Waiter]
   }
 
   private let lock = NSLock()
   private var pending: [String: Pending] = [:]
   private var tasks: [Int: String] = [:]
+  /// Waiters cancelled before they were registered: they leave as soon as they arrive.
+  private var cancelledEarly: Set<UUID> = []
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
 
   /// A local file for `url`: itself when it is one, the cached download otherwise.
@@ -105,30 +115,65 @@ public final class AudioDownloads: NSObject, URLSessionDownloadDelegate, @unchec
       return destination
     }
 
-    return try await withCheckedThrowingContinuation { continuation in
-      let start = lock.withLock { () -> Bool in
-        if var existing = pending[key] {
-          existing.continuations.append(continuation)
-          existing.progress.append(progress)
-          pending[key] = existing
-          return false
+    let id = UUID()
+
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+        let action = lock.withLock { () -> (start: Bool, cancelled: Bool) in
+          if cancelledEarly.remove(id) != nil {
+            return (false, true)
+          }
+          let waiter = Waiter(continuation: continuation, progress: progress)
+          if pending[key] != nil {
+            pending[key]?.waiters[id] = waiter
+            return (false, false)
+          }
+          pending[key] = Pending(destination: destination, task: nil, waiters: [id: waiter])
+          return (true, false)
         }
-        pending[key] = Pending(destination: destination, continuations: [continuation], progress: [progress])
-        return true
-      }
 
-      guard start else {
-        return
-      }
+        if action.cancelled {
+          continuation.resume(throwing: CancellationError())
+          return
+        }
+        guard action.start else {
+          return
+        }
 
-      var request = URLRequest(url: url)
-      for (name, value) in headers {
-        request.setValue(value, forHTTPHeaderField: name)
+        var request = URLRequest(url: url)
+        for (name, value) in headers {
+          request.setValue(value, forHTTPHeaderField: name)
+        }
+        let task = session.downloadTask(with: request)
+        lock.withLock {
+          tasks[task.taskIdentifier] = key
+          pending[key]?.task = task
+        }
+        task.resume()
       }
-      let task = session.downloadTask(with: request)
-      lock.withLock { tasks[task.taskIdentifier] = key }
-      task.resume()
+    } onCancel: {
+      self.leave(key: key, waiter: id)
     }
+  }
+
+  /// A cancelled request leaves; the last one to leave stops the download.
+  private func leave(key: String, waiter id: UUID) {
+    let (waiter, orphaned) = lock.withLock { () -> (Waiter?, URLSessionDownloadTask?) in
+      guard let waiter = pending[key]?.waiters.removeValue(forKey: id) else {
+        cancelledEarly.insert(id)
+        return (nil, nil)
+      }
+      guard pending[key]?.waiters.isEmpty == true else {
+        return (waiter, nil)
+      }
+      let task = pending.removeValue(forKey: key)?.task
+      if let task {
+        tasks.removeValue(forKey: task.taskIdentifier)
+      }
+      return (waiter, task)
+    }
+    orphaned?.cancel()
+    waiter?.continuation.resume(throwing: CancellationError())
   }
 
   private func finish(_ task: URLSessionTask, with result: Result<URL, Error>) {
@@ -138,8 +183,8 @@ public final class AudioDownloads: NSObject, URLSessionDownloadDelegate, @unchec
       }
       return pending.removeValue(forKey: key)
     }
-    for continuation in entry?.continuations ?? [] {
-      continuation.resume(with: result)
+    for waiter in entry?.waiters.values ?? [:].values {
+      waiter.continuation.resume(with: result)
     }
   }
 
@@ -154,7 +199,7 @@ public final class AudioDownloads: NSObject, URLSessionDownloadDelegate, @unchec
       guard let key = tasks[downloadTask.taskIdentifier] else {
         return []
       }
-      return pending[key]?.progress ?? []
+      return pending[key]?.waiters.values.map(\.progress) ?? []
     }
     let fraction = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
     for callback in callbacks {

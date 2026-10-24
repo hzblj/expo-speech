@@ -121,6 +121,9 @@ export const useTranscription = (transcription: Transcription | null): Transcrip
   return snapshot
 }
 
+/** How many mounted `useTranscribe` follow each transcription. */
+const consumers = new WeakMap<Transcription, number>()
+
 export type UseTranscribeOptions = TranscribeOptions & {
   /**
    * Start only when true, for a list that transcribes what is on screen.
@@ -160,9 +163,14 @@ export const useTranscribe = (
     const started = transcriber.transcribe(currentSource, JSON.parse(optionsKey) as TranscribeOptions)
 
     setTranscription(started)
+    consumers.set(started, (consumers.get(started) ?? 0) + 1)
 
     return () => {
-      if (cancelOnUnmount && started.state === 'queued') {
+      const remaining = (consumers.get(started) ?? 1) - 1
+
+      consumers.set(started, remaining)
+      // A `cacheKey` hands every component the same transcription: only the last one to leave takes it off the queue.
+      if (cancelOnUnmount && remaining === 0 && started.state === 'queued') {
         started.cancel()
       }
     }

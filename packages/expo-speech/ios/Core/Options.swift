@@ -86,7 +86,8 @@ public struct TranscriberOptions: Decodable, Sendable, Equatable {
     [
       mode.rawValue, punctuation ? "p" : "", alternatives ? "a" : "", maskOffensiveWords == true ? "m" : "",
       ios.engine.rawValue, ios.emoji ? "e" : "", ios.contentHints.sorted().joined(separator: ","),
-      contextualStrings.joined(separator: "|"), ios.customLanguageModel?.languageModel ?? "",
+      contextualStrings.joined(separator: "|"), onDevice ? "d" : "", ios.taskHint ?? "",
+      ios.customLanguageModel.map { "\($0.languageModel)|\($0.vocabulary ?? "")|\($0.weight ?? -1)" } ?? "",
     ].joined(separator: ";")
   }
 }

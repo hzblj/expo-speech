@@ -50,7 +50,10 @@ data class TranscriberOptions(
     get() = listOf(
       mode, if (punctuation) "p" else "", if (alternatives) "a" else "", if (maskOffensiveWords == true) "m" else "",
       if (onDevice) "d" else "", contextualStrings.joinToString("|"), android.recognitionService ?: "",
-      android.formatting ?: ""
+      android.formatting ?: "", android.maxResults?.toString() ?: "",
+      if (android.languageDetection) "l" + android.languageDetectionAllowed.joinToString(",") else "",
+      android.languageSwitch?.let { it + android.languageSwitchAllowed.joinToString(",") } ?: "",
+      android.extras.toSortedMap().toString()
     ).joinToString(";")
 
   companion object {

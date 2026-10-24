@@ -186,7 +186,7 @@ A transcription installs its locale's model by itself when it is missing; `insta
 
 ## Errors
 
-Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service` or `unknown`. Audio without speech is not an error: it completes with an empty transcript.
+Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service`, `cancelled` or `unknown`. Audio without speech is not an error: it completes with an empty transcript. A transcription shared through a `cacheKey` is taken off the queue by `useTranscribe` only when the last component following it unmounts.
 
 ## Platform behavior
 
@@ -199,7 +199,7 @@ Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`,
 | Models on demand | Yes | No | Yes, with progress | Yes | No |
 
 - **Word times.** A word the platform did not time (Android 13, a phrase timed as one, a result still being revised) gets its share of the stretch around it by its length, and says so in `timing: 'estimated'`. Android times only where a word starts; it ends where the next one starts, or after a time for its length.
-- **Android runs one session at a time,** as its recognition services do; files wait for each other and for the microphone, while their downloads go ahead.
+- **Android runs one session at a time,** as its recognition services do. The microphone goes first: it skips the files waiting, and a file being transcribed makes way and continues afterwards from the end of its final text. Downloads and decoding go ahead meanwhile.
 - **The iOS simulator** has no `SpeechTranscriber`: it falls back to `DictationTranscriber`. The simulator's microphone needs the Simulator app to have microphone access on the Mac.
 
 ## Example

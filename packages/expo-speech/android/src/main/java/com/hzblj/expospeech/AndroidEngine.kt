@@ -43,10 +43,13 @@ sealed interface EngineAudio {
    * through `AudioRecord`. Goes to the recognizer through `EXTRA_AUDIO_SOURCE`, Android 13 and later.
    */
   class Stream(
-    val feed: suspend (write: (ShortArray) -> Unit) -> Unit,
+    /** Writes the audio from `from` seconds on (a file) or from now (the microphone, which ignores it). */
+    val feed: suspend (from: Double, write: (ShortArray) -> Unit) -> Unit,
+    /** A file (paced, formatted for quality), not the microphone (real time, formatted for latency). */
+    val isFile: Boolean,
     /** Seconds of the file before the stream, added to every time. */
     val offset: Double = 0.0,
-    /** The stream's length in seconds, for progress. */
+    /** The stream's length in seconds, for progress; unknown for the microphone and some containers. */
     val duration: Double? = null
   ) : EngineAudio
 
@@ -210,66 +213,82 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     }
   }
 
-  /** Runs until the audio ends. One session at a time in the whole app: the recognition services take one. */
+  /** Runs until the audio ends. One session at a time in the whole app, the microphone first: see `SessionGate`. */
   suspend fun run(audio: EngineAudio, sink: EngineSink, silenceMillis: Long? = null) {
     ensureModel(sink)
-    sessions.withLock {
-      when (audio) {
-        is EngineAudio.Stream -> runStream(audio, sink)
-        is EngineAudio.RecognizerMicrophone -> runMicrophone(audio, sink, silenceMillis)
+    when (audio) {
+      is EngineAudio.Stream -> runStream(audio, sink)
+      is EngineAudio.RecognizerMicrophone -> SessionGate.use(microphone = true) {
+        runMicrophone(audio, sink, silenceMillis)
       }
     }
   }
 
   companion object {
-    /** Google's on-device service runs one session at a time; a second fails with ERROR_RECOGNIZER_BUSY. */
-    private val sessions = Mutex()
-
     /** How long the audio may take to start: a microphone that delivers nothing by then is a failure. */
     private const val FIRST_AUDIO_TIMEOUT_MILLIS = 8_000L
   }
 
   /**
-   * A session over a stream, tried again (twice at most) when the service drops before it starts: a service that
-   * another client just let go of can disconnect the next one. `feed` starts over each time.
+   * Sessions over a stream until it ends. A session the service drops before it starts is tried again (twice at
+   * most): a service that another client just let go of can disconnect the next one. A file session that makes way
+   * for the microphone continues afterwards from the end of its final text.
    */
   private suspend fun runStream(audio: EngineAudio.Stream, sink: EngineSink) {
     if (Build.VERSION.SDK_INT < 33) {
       throw SpeechFailure(SpeechFailure.UNSUPPORTED, "Transcribing audio from a file needs Android 13")
     }
+    var from = audio.offset
     var attempt = 0
     while (true) {
-      try {
-        return streamSession(audio, sink)
+      val resumeAt = try {
+        SessionGate.use(microphone = !audio.isFile) { turn -> streamSession(audio, from, sink, turn) }
       } catch (failure: SpeechFailure) {
         if (!failure.retryable || attempt >= 2) throw failure
         attempt += 1
         delay(400L * attempt)
+        continue
       }
+      from = resumeAt ?: return
     }
   }
 
-  private suspend fun streamSession(audio: EngineAudio.Stream, sink: EngineSink) = coroutineScope {
+  /** One session from `from` seconds on. Returns null at the end of the audio, or where to go on after making way. */
+  private suspend fun streamSession(
+    audio: EngineAudio.Stream,
+    from: Double,
+    sink: EngineSink,
+    turn: SessionGate.Turn
+  ): Double? = coroutineScope {
     val (read, write) = ParcelFileDescriptor.createPipe()
     val output = ParcelFileDescriptor.AutoCloseOutputStream(write)
     val fed = AtomicLong(0)
-    val clock = { audio.offset + fed.get().toDouble() / RECOGNIZER_SAMPLE_RATE }
+    val clock = { from + fed.get().toDouble() / RECOGNIZER_SAMPLE_RATE }
     val done = CompletableDeferred<Unit>()
     val firstAudio = CompletableDeferred<Unit>()
-    val listener = Listener(sink, done, clock, audio.offset)
+    val listener = Listener(sink, done, clock, from)
+
+    if (audio.isFile) {
+      SessionGate.onPreempt(turn) { done.completeExceptionally(Preempted()) }
+    }
 
     // A file is fed no faster than `feedSpeed` times real time: Google's on-device recognizer, fed at full speed,
     // finalizes segments late and drops some. The microphone comes in real time anyway.
-    val speed = if (audio.duration != null) options.android.feedSpeed else Double.POSITIVE_INFINITY
+    val speed = if (audio.isFile) options.android.feedSpeed else Double.POSITIVE_INFINITY
 
     // The audio starts first, and the recognizer once it flows: an empty pipe at the start reads as the end of the
     // audio to Google's recognizer, and a microphone takes a moment to open. Until then the pipe holds the audio.
     val writer = launch(Dispatchers.IO) {
       val started = System.nanoTime()
       try {
+        var reported = -1
         output.use { stream ->
-          audio.feed { samples ->
-            stream.write(samples.toLittleEndianBytes())
+          audio.feed(from) { samples ->
+            try {
+              stream.write(samples.toLittleEndianBytes())
+            } catch (error: IOException) {
+              throw PipeClosed(error)
+            }
             val total = fed.addAndGet(samples.size.toLong())
             firstAudio.complete(Unit)
             if (speed.isFinite()) {
@@ -277,14 +296,19 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
               val elapsed = (System.nanoTime() - started) / 1_000_000
               if (due > elapsed) Thread.sleep(due - elapsed)
             }
+            // A percent at a time: a chunk is a few milliseconds of audio.
             audio.duration?.takeIf { it > 0 }?.let { length ->
-              sink.progress(minOf(1.0, (clock() - audio.offset) / length) * 0.99, "transcribing")
+              val percent = (minOf(1.0, (clock() - audio.offset) / length) * 99).toInt()
+              if (percent != reported) {
+                reported = percent
+                sink.progress(percent / 100.0, "transcribing")
+              }
             }
           }
         }
         listener.audioEnded = true
         firstAudio.complete(Unit)
-      } catch (_: IOException) {
+      } catch (_: PipeClosed) {
         // The recognizer closed its end: it finished or failed, and says which through the listener.
       } catch (error: kotlinx.coroutines.CancellationException) {
         throw error
@@ -302,17 +326,30 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
       withTimeoutOrNull(FIRST_AUDIO_TIMEOUT_MILLIS) { firstAudio.await() }
         ?: throw SpeechFailure(SpeechFailure.AUDIO, "No audio came from the microphone")
 
-      recognizer = withContext(Dispatchers.Main) {
-        createRecognizer().apply {
+      // Kept as soon as it exists: a cancel during this block must still find it to destroy.
+      withContext(Dispatchers.Main) {
+        recognizer = createRecognizer().apply {
           setRecognitionListener(listener)
-          startListening(intent(read, microphone = audio.duration == null))
+          startListening(intent(read, microphone = !audio.isFile))
         }
       }
 
       done.await()
-      if (audio.duration != null) {
+      if (audio.isFile) {
         sink.progress(1.0, "transcribing")
       }
+      null
+    } catch (_: Preempted) {
+      // The recognizer goes first, so nothing it says after this moment lands past the point to go on from. What
+      // was still volatile is dropped: the next session hears it again.
+      withContext(NonCancellable + Dispatchers.Main) {
+        recognizer?.cancel()
+        recognizer?.destroy()
+        recognizer = null
+      }
+      val resumeAt = listener.finalizedThrough
+      sink.recognized(RecognizedResult(emptyList(), resumeAt, resumeAt, isFinal = false))
+      resumeAt
     } finally {
       writer.cancel()
       recognizer?.let {
@@ -369,6 +406,9 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     @Volatile var audioEnded = false
     private var ready = false
     private var lastEnd = offset
+
+    /** Where the final text ends, in the audio's seconds. */
+    val finalizedThrough: Double get() = lastEnd
     private var language: String? = null
     private var gotResults = false
 
@@ -499,6 +539,12 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     }
   }
 }
+
+/** A file session asked to make way for the microphone. */
+private class Preempted : Exception()
+
+/** A write into the pipe failed: the recognizer let go of its end. Not an error of the audio. */
+private class PipeClosed(cause: Throwable) : Exception(cause)
 
 /** A recognized part: its text, when it starts (when timed) and how sure the recognizer is. */
 data class PartTiming(val text: String, val start: Double?, val confidence: Double?)

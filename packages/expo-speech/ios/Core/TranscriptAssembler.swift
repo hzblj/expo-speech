@@ -214,7 +214,8 @@ public final class TranscriptAssembler {
       finalLength += segment.text.utf16.count
       appended.append(segment)
     }
-    if !appended.isEmpty {
+    // Any final result settles what was volatile, an empty one too: the recognizer took that text back.
+    if !results.isEmpty {
       volatile = nil
     }
     return appended

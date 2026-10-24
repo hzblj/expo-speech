@@ -8,7 +8,7 @@ import {
 } from '@hzblj/expo-speech'
 import {Box, Pressable, RnIcon, RnScrollView, RnText, useAppTheme} from '@hzblj/kara-ui'
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio'
-import {useState} from 'react'
+import {useRef, useState} from 'react'
 import {Pressable as HoldPressable} from 'react-native'
 
 import {Caption, formatDuration, Karaoke, WordTrack} from '../ui/karaoke'
@@ -34,7 +34,12 @@ export const LiveScreen = () => {
   const listening = state === 'transcribing' || state === 'preparing' || state === 'queued'
   const recorded = state === 'completed' && transcript.audioUri
 
+  // The button may be let go while the permission is still being asked: the press decides, not the closure.
+  const pressing = useRef(false)
+  const current = useRef<Transcription | null>(null)
+
   const start = async () => {
+    pressing.current = true
     setRefusal(null)
     const permission = await Speech.requestPermissionsAsync()
 
@@ -42,16 +47,22 @@ export const LiveScreen = () => {
       setRefusal('The microphone is not allowed. Turn it on in Settings to talk to the car.')
       return
     }
+    if (!pressing.current) {
+      return
+    }
     player.pause()
     try {
-      setTranscription(transcriber.listen({record: true, volumeInterval: 60}))
+      const started = transcriber.listen({record: true, volumeInterval: 60})
+      current.current = started
+      setTranscription(started)
     } catch (caught) {
       setRefusal((caught as Error).message)
     }
   }
 
   const stop = () => {
-    transcription?.stop()
+    pressing.current = false
+    current.current?.stop()
   }
 
   const play = async () => {

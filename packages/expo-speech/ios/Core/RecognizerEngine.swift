@@ -92,20 +92,26 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
         let request = SFSpeechAudioBufferRecognitionRequest()
         configure(request)
         let chunks = try reader.chunks(in: request.nativeAudioFormat)
+        let state = TaskState()
         let feeding = Task {
-          for try await chunk in chunks {
-            request.append(chunk.buffer)
+          defer { request.endAudio() }
+          do {
+            for try await chunk in chunks {
+              request.append(chunk.buffer)
+            }
+          } catch {
+            state.resume(throwing: error)
           }
-          request.endAudio()
         }
         defer { feeding.cancel() }
         try await recognize(
           request, offset: reader.range.lowerBound,
-          duration: reader.range.upperBound - reader.range.lowerBound, sink: sink)
+          duration: reader.range.upperBound - reader.range.lowerBound, sink: sink, state: state)
       }
     case .microphone(let capture):
       let request = SFSpeechAudioBufferRecognitionRequest()
       configure(request)
+      try Task.checkCancellation()
       let stream = try capture.start(format: request.nativeAudioFormat)
       let feeding = Task {
         do {
@@ -121,15 +127,18 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
   }
 
   private func recognize(
-    _ request: SFSpeechRecognitionRequest, offset: Double, duration: Double?, sink: EngineSink
+    _ request: SFSpeechRecognitionRequest, offset: Double, duration: Double?, sink: EngineSink,
+    state: TaskState = TaskState()
   ) async throws {
-    let state = TaskState()
     let alternatives = options.alternatives
 
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        state.continuation = continuation
-        state.task = recognizer.recognitionTask(with: request) { result, error in
+        // Cancelled (or failed) before this point: resumed at once, and no recognition starts.
+        guard state.install(continuation) else {
+          return
+        }
+        state.start(recognizer.recognitionTask(with: request) { result, error in
           if let result {
             let recognized = Self.recognized(result, offset: offset, alternatives: alternatives)
             sink.engine(recognized: recognized)
@@ -145,7 +154,7 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
           if let error {
             state.resume(throwing: SpeechFailure.isNoSpeech(error) ? nil : error)
           }
-        }
+        })
       }
     } onCancel: {
       state.cancel()
@@ -187,20 +196,50 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
   }
 }
 
-/// A recognition task's continuation, resumed once whatever ends it first: the final result, an error or a cancel.
-private final class TaskState: @unchecked Sendable {
+/// A recognition task's continuation, resumed once by whatever ends it first: the final result, an error or a cancel.
+/// What ends it before the continuation is there (a cancel, a decoding error) is kept and delivered when it arrives.
+final class TaskState: @unchecked Sendable {
   private let lock = NSLock()
-  private var resumed = false
-  var continuation: CheckedContinuation<Void, Error>?
-  var task: SFSpeechRecognitionTask?
+  private var continuation: CheckedContinuation<Void, Error>?
+  private var task: SFSpeechRecognitionTask?
+  /// Set once it is decided: `.success` or the error it ends with.
+  private var outcome: Result<Void, Error>?
+
+  /// Takes the continuation. Returns false when the outcome is already decided; the continuation is resumed with it.
+  func install(_ continuation: CheckedContinuation<Void, Error>) -> Bool {
+    let decided = lock.withLock { () -> Result<Void, Error>? in
+      if let outcome {
+        return outcome
+      }
+      self.continuation = continuation
+      return nil
+    }
+    if let decided {
+      continuation.resume(with: decided)
+      return false
+    }
+    return true
+  }
+
+  func start(_ task: SFSpeechRecognitionTask) {
+    let cancelled = lock.withLock { () -> Bool in
+      self.task = task
+      return outcome != nil
+    }
+    if cancelled {
+      task.cancel()
+    }
+  }
 
   func resume(throwing error: Error?) {
     let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
-      guard !resumed else {
+      guard outcome == nil else {
         return nil
       }
-      resumed = true
-      return self.continuation
+      outcome = error.map { .failure($0) } ?? .success(())
+      let continuation = self.continuation
+      self.continuation = nil
+      return continuation
     }
     if let error {
       continuation?.resume(throwing: error)
@@ -210,6 +249,7 @@ private final class TaskState: @unchecked Sendable {
   }
 
   func cancel() {
+    let task = lock.withLock { self.task }
     task?.cancel()
     resume(throwing: CancellationError())
   }

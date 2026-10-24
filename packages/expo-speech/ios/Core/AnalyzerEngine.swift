@@ -240,6 +240,8 @@ public final class AnalyzerEngine: SpeechEngine, @unchecked Sendable {
       inputs = AnalyzerInputs(try reader.chunks(in: format))
       duration = reader.range.upperBound - reader.range.lowerBound
     case .microphone(let capture):
+      // A transcription cancelled while the model loaded never opens the microphone.
+      try Task.checkCancellation()
       inputs = AnalyzerInputs(try capture.start(format: format))
     }
 

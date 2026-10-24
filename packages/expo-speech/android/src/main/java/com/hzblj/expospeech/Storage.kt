@@ -2,9 +2,14 @@ package com.hzblj.expospeech
 
 import android.content.Context
 import android.net.Uri
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -62,10 +67,16 @@ class TranscriptCache(private val storage: SpeechStorage) {
   }
 }
 
-/** Remote audio, downloaded once per URL and kept in the cache. Concurrent requests for one URL share the download. */
+/**
+ * Remote audio, downloaded once per URL and kept in the cache. Concurrent requests for one URL share the download,
+ * which runs in a scope of its own: a request that is cancelled leaves without failing the others, and the download
+ * stops when nobody waits for it any more.
+ */
 class AudioDownloads(private val context: Context, private val storage: SpeechStorage) {
-  private val pending = mutableMapOf<String, CompletableDeferred<File>>()
-  private val listeners = mutableMapOf<String, MutableList<(Double) -> Unit>>()
+  private class Shared(val download: Deferred<File>, val listeners: MutableList<(Double) -> Unit>, var waiters: Int)
+
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val pending = mutableMapOf<String, Shared>()
 
   /** A local file for `uri`: the file itself, a copy of a `content://` one, or the cached download of an http(s) one. */
   suspend fun localFile(uri: String, headers: Map<String, String>, progress: (Double) -> Unit): File {
@@ -83,35 +94,47 @@ class AudioDownloads(private val context: Context, private val storage: SpeechSt
       return destination
     }
 
-    val (deferred, starts) = synchronized(this) {
-      listeners.getOrPut(uri) { mutableListOf() }.add(progress)
-      val existing = pending[uri]
-      if (existing != null) existing to false else CompletableDeferred<File>().also { pending[uri] = it } to true
-    }
-
-    if (starts) {
-      try {
-        val file = withContext(Dispatchers.IO) { download(uri, headers, destination) }
-        deferred.complete(file)
-      } catch (error: Throwable) {
-        deferred.completeExceptionally(error)
-      } finally {
-        synchronized(this) {
-          pending.remove(uri)
-          listeners.remove(uri)
+    val shared = synchronized(this) {
+      pending.getOrPut(uri) {
+        val listeners = mutableListOf<(Double) -> Unit>()
+        val download = scope.async {
+          try {
+            download(uri, headers, destination) { fraction ->
+              synchronized(this@AudioDownloads) { listeners.toList() }.forEach { it(fraction) }
+            }
+          } finally {
+            synchronized(this@AudioDownloads) { pending.remove(uri) }
+          }
         }
+        Shared(download, listeners, 0)
+      }.also {
+        it.waiters += 1
+        it.listeners.add(progress)
       }
     }
-    return deferred.await()
+
+    try {
+      return shared.download.await()
+    } finally {
+      val orphaned = synchronized(this) {
+        shared.waiters -= 1
+        shared.listeners.remove(progress)
+        shared.waiters == 0 && !shared.download.isCompleted
+      }
+      if (orphaned) {
+        shared.download.cancel()
+      }
+    }
   }
 
-  private fun download(uri: String, headers: Map<String, String>, destination: File): File {
+  private suspend fun download(uri: String, headers: Map<String, String>, destination: File, progress: (Double) -> Unit): File {
     val connection = (URL(uri).openConnection() as HttpURLConnection).apply {
       connectTimeout = 15_000
       readTimeout = 30_000
       instanceFollowRedirects = true
       headers.forEach { (name, value) -> setRequestProperty(name, value) }
     }
+    val temporary = File(destination.path + ".part")
     try {
       val status = connection.responseCode
       if (status !in 200..299) {
@@ -119,19 +142,19 @@ class AudioDownloads(private val context: Context, private val storage: SpeechSt
       }
       val total = connection.contentLengthLong
       storage.audio.mkdirs()
-      val temporary = File(destination.path + ".part")
       connection.inputStream.use { input ->
         temporary.outputStream().use { output ->
           val buffer = ByteArray(64 * 1024)
           var written = 0L
           while (true) {
+            // Nobody waits any more: stop between reads.
+            coroutineContext.ensureActive()
             val read = input.read(buffer)
             if (read < 0) break
             output.write(buffer, 0, read)
             written += read
             if (total > 0) {
-              val fraction = written.toDouble() / total
-              synchronized(this) { listeners[uri]?.toList() }?.forEach { it(fraction) }
+              progress(written.toDouble() / total)
             }
           }
         }
@@ -141,6 +164,9 @@ class AudioDownloads(private val context: Context, private val storage: SpeechSt
       }
       return destination
     } catch (error: SpeechFailure) {
+      throw error
+    } catch (error: kotlinx.coroutines.CancellationException) {
+      temporary.delete()
       throw error
     } catch (error: Exception) {
       throw SpeechFailure(SpeechFailure.NETWORK, error.message ?: "The download failed", error)

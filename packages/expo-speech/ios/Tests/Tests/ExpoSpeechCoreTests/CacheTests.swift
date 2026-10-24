@@ -8,7 +8,7 @@ final class CacheTests: XCTestCase {
     assembler.appendFinal([RecognizedResult(runs: [RecognizedRun(text: "Box", start: 0, end: 0.4)], start: 0, end: 0.4, isFinal: true)])
     let key = UUID().uuidString
 
-    TranscriptCache.write(assembler.finalTranscript, key: key, engine: "analyzer", fingerprint: "f")
+    TranscriptCache.write(assembler.finalTranscript, key: key, locale: "en-GB", engine: "analyzer", fingerprint: "f")
 
     XCTAssertEqual(TranscriptCache.read(key: key, locale: "en-GB", engine: "analyzer", fingerprint: "f")?.text, "Box")
     XCTAssertNil(TranscriptCache.read(key: key, locale: "en-GB", engine: "analyzer", fingerprint: "other"))
@@ -26,7 +26,7 @@ final class CacheTests: XCTestCase {
     var transcript = Transcript(locale: "en-GB")
     transcript.audioUri = stale
     let key = UUID().uuidString
-    TranscriptCache.write(transcript, key: key, engine: "analyzer", fingerprint: "f")
+    TranscriptCache.write(transcript, key: key, locale: "en-GB", engine: "analyzer", fingerprint: "f")
 
     XCTAssertEqual(TranscriptCache.read(key: key, locale: "en-GB", engine: "analyzer", fingerprint: "f")?.audioUri, current.absoluteString)
     XCTAssertNil(TranscriptCache.relocated("file:///gone/\(UUID().uuidString).mp3"))

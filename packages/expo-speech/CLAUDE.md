@@ -60,8 +60,13 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
   lock on the JS thread froze the app once.
 - **The simulator's microphone** goes through the Mac's CoreAudio: without microphone access for the Simulator app,
   `AVAudioEngine.inputNode` hangs and CoreAudio aborts the app ("Cleanup: RPC timeout. Apparently deadlocked"). Not
-  ours to fix; test `listen` on a device or after allowing the Simulator the microphone. The emulator's microphone
-  waits on the same kind of host permission (`AudioRecord` blocks; the session fails with `audio` after 8 s).
+  ours to fix; test `listen` on a device or after allowing the Simulator the microphone. (The Android emulator's
+  microphone works: it records silence.)
+- **`MicrophoneCapture` takes `stop` at any time**: before `start` (the stream comes back finished and the microphone
+  never opens), during it (honoured once the engine runs), after. Every run stops it when it ends, however it ends,
+  and its stream's `onTermination` does too: an engine that fails must not leave the microphone on.
+- **`TaskState`** (the recognizer's continuation) keeps an outcome that comes before the continuation: a cancel at the
+  wrong moment otherwise leaves a transcription unsettled forever.
 
 ## Android (`android/`)
 
@@ -76,9 +81,13 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
     `android.feedSpeed` (4× real time) every one comes through (a 17.6 s clip in about 6 s).
   - *Audio before the session.* An empty pipe at the start reads as the end of the audio ("no speech" within 40 ms),
     so the audio starts first and the recognizer once the first chunk is in the pipe; nothing in 8 s is an `audio`
-    error. A writer that fails fails the session with its own error, never the "no speech" the closed pipe causes.
-  - *One session at a time* (`getMaxConcurrentSessionsCount`): a second gets ERROR_RECOGNIZER_BUSY, so sessions share
-    a process-wide mutex; downloads and decoding still run in parallel.
+    error. A writer that fails fails the session with its own error, never the "no speech" the closed pipe causes;
+    only a failed write into the pipe (`PipeClosed`) means the recognizer let go.
+  - *One session at a time* (`getMaxConcurrentSessionsCount`): a second gets ERROR_RECOGNIZER_BUSY. `SessionGate`
+    hands out one turn at a time, the microphone first: it goes before waiting files, and a running file session is
+    asked to make way (`Preempted`), destroys its recognizer, drops its volatile text and continues later from
+    `finalizedThrough`, so nothing is heard twice. Before the gate, a held talk button waited behind the radio's
+    queue and recorded nothing. Downloads and decoding still run in parallel.
   - *Don't bind and drop the service right before a session*: `checkRecognitionSupport`'s recognizer, destroyed, can
     take the service down under the next one (ERROR_SERVER_DISCONNECTED before `onReadyForSpeech`). Locale checks are
     cached per process, the engine waits 300 ms after one, and such a session is retried (twice) with fresh audio.
@@ -91,6 +100,8 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
   Android 13 the recognizer's own microphone runs instead, restarted after each utterance until `stop`.
 - The library manifest's `<queries>` for `android.speech.RecognitionService` is what lets Android 11+ find the service.
 - JVM tests: `yarn test:android` (needs the example's prebuilt `android/`).
+- Known: a recognizer that reports "no speech" in the middle of a file ends that session as completed (the rest of the
+  file is not heard). Not seen with Google's on-device recognizer, which keeps a segmented session through silence.
 
 ## Rules
 

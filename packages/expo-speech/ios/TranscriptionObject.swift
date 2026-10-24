@@ -140,18 +140,29 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
     // Strong while it runs: the transcriber holds it anyway, and JavaScript may let go of it mid-run.
     let task = Task {
       do {
+        // Cancelled between the queue and here: it never starts.
+        if lock.withLock({ cancelRequested }) {
+          throw CancellationError()
+        }
         let engine = try await engine.value
         let input = try await input()
         try Task.checkCancellation()
         setState(.transcribing)
         try await engine.run(input, sink: self)
+        stopCapture()
         finish()
       } catch {
+        // However the engine ended, the microphone goes off with it.
+        stopCapture()
         let failure = SpeechFailure.from(error)
         settle(failure.code == .cancelled ? .cancelled : .failed, failure: failure)
       }
     }
     lock.withLock { self.task = task }
+  }
+
+  private func stopCapture() {
+    lock.withLock { capture }?.stop()
   }
 
   private func finish() {
@@ -169,7 +180,8 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
       return
     }
     if let slot = cacheSlot, kind == .file {
-      TranscriptCache.write(transcript, key: slot.key, engine: slot.engine, fingerprint: slot.fingerprint)
+      TranscriptCache.write(
+        transcript, key: slot.key, locale: slot.locale, engine: slot.engine, fingerprint: slot.fingerprint)
     }
     // A call ended the listening early: what was heard is final, and the error says why it stopped.
     settle(.completed, failure: interrupted ? SpeechFailure(.interrupted, "Another app or a call took the microphone") : nil)
