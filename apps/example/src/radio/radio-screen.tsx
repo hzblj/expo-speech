@@ -1,7 +1,7 @@
 import {FlagView} from '@hzblj/expo-flags-kit'
 import {Box, Chip, EmptyState, Island, RnFlatList, RnText} from '@hzblj/kara-ui'
 import {setAudioModeAsync, useAudioPlayer} from 'expo-audio'
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useRef, useState} from 'react'
 
 import {DRIVERS, flagCode, MEETING, type RadioClip, SESSIONS} from '../f1/radio'
 import {useRadioTranscriber} from '../speech'
@@ -47,26 +47,40 @@ export const RadioScreen = () => {
   const transcriber = useRadioTranscriber(DRIVERS)
   const player = useAudioPlayer(null, {updateInterval: 100})
   const [playing, setPlaying] = useState<string | null>(null)
+  // Read by the callback, so it stays the same and only the cards whose state changes re-render.
+  const playingRef = useRef(playing)
+  playingRef.current = playing
 
   useEffect(() => {
     setAudioModeAsync({playsInSilentMode: true})
   }, [])
 
+  // A message that played to its end lets go: its card is at rest again, and a tap plays it from the start.
+  useEffect(() => {
+    const subscription = player.addListener('playbackStatusUpdate', status => {
+      if (status.didJustFinish) {
+        setPlaying(null)
+      }
+    })
+    return () => subscription.remove()
+  }, [player])
+
   const onPlay = useCallback(
     (clip: RadioClip, audioUri: string) => {
-      if (playing === clip.id) {
-        if (player.playing) {
-          player.pause()
-        } else {
-          player.play()
+      if (playingRef.current !== clip.id) {
+        player.replace({uri: audioUri})
+        player.play()
+        setPlaying(clip.id)
+      } else if (player.playing) {
+        player.pause()
+      } else {
+        if (player.duration > 0 && player.currentTime >= player.duration - 0.1) {
+          player.seekTo(0)
         }
-        return
+        player.play()
       }
-      player.replace({uri: audioUri})
-      player.play()
-      setPlaying(clip.id)
     },
-    [player, playing]
+    [player]
   )
 
   return (

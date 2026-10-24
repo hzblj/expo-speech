@@ -16,7 +16,7 @@ const time = (date: Date) =>
 const QUIET_FAILURES: Partial<Record<string, string>> = {
   'locale-unavailable':
     "No English speech model on this device, so no words. A phone downloads it; a simulator often can't.",
-  unsupported: "This device can't transcribe the recording.",
+  unsupported: 'Speech recognition is unsupported in this simulator: transcribe on a device.',
 }
 
 type RadioCardProps = {
@@ -28,7 +28,7 @@ type RadioCardProps = {
   onPlay: (clip: RadioClip, audioUri: string) => void
 }
 
-/** The playing card's live parts: the lit words and the track, which re-render with the player. */
+/** The playing card's live parts: the lit words (once there are any) and the track, which re-render with the player. */
 const NowPlaying = ({
   player,
   transcript,
@@ -41,8 +41,36 @@ const NowPlaying = ({
 
   return (
     <Box gap="s12">
-      <Karaoke playing={status.playing} transcript={transcript} variant="headline" wordIndex={wordIndex} />
+      {transcript.text ? (
+        <Karaoke playing={status.playing} transcript={transcript} variant="headline" wordIndex={wordIndex} />
+      ) : null}
       <WordTrack duration={status.duration || transcript.duration || 0} time={getTime()} words={transcript.words} />
+    </Box>
+  )
+}
+
+/** Play or pause as the player is, and the time: where it is while it plays, its length otherwise. */
+const PlayState = ({duration, player}: {duration: number; player: AudioPlayer | null}) =>
+  player ? <PlayingState player={player} /> : <IdleState duration={duration} />
+
+const IdleState = ({duration}: {duration: number}) => (
+  <Box align="flex-end" gap="s4">
+    <RnIcon color="content.secondary" name="play-arrow" />
+    <RnText color="content.tertiary" style={{fontVariant: ['tabular-nums']}} variant="caption">
+      {formatDuration(duration)}
+    </RnText>
+  </Box>
+)
+
+const PlayingState = ({player}: {player: AudioPlayer}) => {
+  const status = useAudioPlayerStatus(player)
+
+  return (
+    <Box align="flex-end" gap="s4">
+      <RnIcon color="content.accent" name={status.playing ? 'pause' : 'play-arrow'} />
+      <RnText color="content.accent" style={{fontVariant: ['tabular-nums']}} variant="caption">
+        {formatDuration(status.currentTime)}
+      </RnText>
     </Box>
   )
 }
@@ -62,7 +90,7 @@ export const RadioCard = memo(({active, clip, onPlay, player, transcriber}: Radi
 
   return (
     <Pressable
-      accessibilityLabel={`Play ${driver?.full_name ?? 'radio'} at ${time(clip.date)}`}
+      accessibilityLabel={`${active ? 'Play or pause' : 'Play'} ${driver?.full_name ?? 'radio'} at ${time(clip.date)}`}
       accessibilityRole="button"
       bg={active ? 'surface.secondary' : 'surface.primary'}
       borderRadius="large"
@@ -101,15 +129,7 @@ export const RadioCard = memo(({active, clip, onPlay, player, transcriber}: Radi
             </Box>
             <Caption>{`${driver?.team_name ?? 'Team radio'} · ${time(clip.date)}`}</Caption>
           </Box>
-          <Box align="flex-end" gap="s4">
-            <RnIcon
-              color={active ? 'content.accent' : 'content.secondary'}
-              name={active ? 'graphic-eq' : 'play-arrow'}
-            />
-            <RnText color="content.tertiary" style={{fontVariant: ['tabular-nums']}} variant="caption">
-              {formatDuration(transcript.duration)}
-            </RnText>
-          </Box>
+          <PlayState duration={transcript.duration ?? 0} player={active ? player : null} />
         </Box>
 
         {state === 'failed' ? (
@@ -124,9 +144,7 @@ export const RadioCard = memo(({active, clip, onPlay, player, transcriber}: Radi
             Only engine noise on this one.
           </RnText>
         ) : transcript.text ? (
-          active && transcription ? (
-            <NowPlaying player={player} transcript={transcript} />
-          ) : (
+          active ? null : (
             <Karaoke transcript={transcript} />
           )
         ) : (
@@ -144,6 +162,8 @@ export const RadioCard = memo(({active, clip, onPlay, player, transcriber}: Radi
             ) : null}
           </Box>
         )}
+
+        {active ? <NowPlaying player={player} transcript={transcript} /> : null}
 
         {transcription?.fromCache || (state === 'completed' && transcript.words.length > 0) ? (
           <Caption color="content.tertiary">
