@@ -9,6 +9,16 @@ import {Caption, formatDuration, Karaoke, WordTrack} from '../ui/karaoke'
 const time = (date: Date) =>
   date.toLocaleTimeString('en-GB', {hour: '2-digit', hour12: false, minute: '2-digit', second: '2-digit'})
 
+/**
+ * Failures that say more about the device than the message, said in a line: an iOS simulator often cannot download
+ * Apple's speech models, where a phone can.
+ */
+const QUIET_FAILURES: Partial<Record<string, string>> = {
+  'locale-unavailable':
+    "No English speech model on this device, so no words. A phone downloads it; a simulator often can't.",
+  unsupported: "This device can't transcribe the recording.",
+}
+
 type RadioCardProps = {
   clip: RadioClip
   transcriber: SpeechTranscriber
@@ -103,8 +113,11 @@ export const RadioCard = memo(({active, clip, onPlay, player, transcriber}: Radi
         </Box>
 
         {state === 'failed' ? (
-          <RnText color="content.destructive" variant="footnote">
-            {error?.message ?? 'The transcription failed'}
+          <RnText
+            color={error && error.code in QUIET_FAILURES ? 'content.tertiary' : 'content.destructive'}
+            variant="footnote"
+          >
+            {(error && QUIET_FAILURES[error.code]) ?? error?.message ?? 'The transcription failed'}
           </RnText>
         ) : settled && transcript.text.trim() === '' ? (
           <RnText color="content.tertiary" variant="body">
