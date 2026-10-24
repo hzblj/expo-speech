@@ -184,7 +184,7 @@ export const LabScreen = () => {
               <Box gap="s6" row wrap>
                 {segment.words.map(word => (
                   <Box bg="surface.secondary" borderRadius="small" key={word.range[0]} px="s6" py="s2">
-                    <RnText style={{fontVariant: ['tabular-nums']}} variant="caption">
+                    <RnText monospacedDigit variant="caption">
                       {`${word.text} ${word.start.toFixed(2)}${word.timing === 'estimated' ? '~' : ''}`}
                     </RnText>
                   </Box>

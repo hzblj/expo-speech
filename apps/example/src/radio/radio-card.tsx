@@ -41,7 +41,7 @@ const PlayingElapsed = ({player}: {player: AudioPlayer}) => (
 )
 
 const ElapsedText = ({seconds}: {seconds: number}) => (
-  <RnText color="content.tertiary" style={{fontVariant: ['tabular-nums'], minWidth: 34}} variant="caption">
+  <RnText color="content.tertiary" monospacedDigit style={{minWidth: 34}} variant="caption">
     {formatDuration(seconds)}
   </RnText>
 )
@@ -90,7 +90,7 @@ export const RadioCard = memo(({active, clip, onPlay, onSeek, player, transcribe
           )}
           <Box fill gap="s2">
             <Box align="baseline" gap="s8" row>
-              <RnText style={{color, fontVariant: ['tabular-nums'], fontWeight: '700'}} variant="headline">
+              <RnText monospacedDigit style={{color, fontWeight: '700'}} variant="headline">
                 {driver ? String(driver.driver_number) : '?'}
               </RnText>
               <RnText style={{fontWeight: '700', letterSpacing: 1}} variant="headline">

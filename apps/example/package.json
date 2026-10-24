@@ -19,7 +19,7 @@
     "@hzblj/expo-flags-kit": "^0.1.0",
     "@hzblj/expo-speech": "workspace:*",
     "@hzblj/expo-waveform": "^0.1.0",
-    "@hzblj/kara-ui": "^0.14.1",
+    "@hzblj/kara-ui": "^0.15.0",
     "@lodev09/react-native-true-sheet": "3.11.18",
     "expo": "~57.0.31",
     "expo-asset": "~57.0.4",
