@@ -1,5 +1,11 @@
 # @hzblj/expo-speech
 
+## 0.1.2
+
+### Patch Changes
+
+- [`32c6fd9`](https://github.com/hzblj/expo-speech/commit/32c6fd9574c4092909d16bfb748fb931734183ac) Thanks [@hzblj](https://github.com/hzblj)! - The README links to the other libraries, at libraries.janblazej.dev.
+
 ## 0.1.1
 
 ### Patch Changes
