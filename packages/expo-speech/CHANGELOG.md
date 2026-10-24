@@ -1,5 +1,11 @@
 # @hzblj/expo-speech
 
+## 0.1.4
+
+### Patch Changes
+
+- [`31c0dc0`](https://github.com/hzblj/expo-speech/commit/31c0dc06073bb5490a0af1a537b4c9dac4998714) Thanks [@hzblj](https://github.com/hzblj)! - The LICENSE is the complete MIT license, with the limitation of liability it was missing.
+
 ## 0.1.3
 
 ### Patch Changes
