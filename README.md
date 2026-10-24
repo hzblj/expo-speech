@@ -5,6 +5,11 @@
 
 Speech to text for Expo on the platforms' own Speech APIs, on the device: `SpeechAnalyzer` on iOS 26 (`SFSpeechRecognizer` before it) and the on-device `SpeechRecognizer` on Android. Files and the microphone, a time for every word, a transcription queue with a cache, and highlighting while the audio plays.
 
+<p>
+  <img alt="Team radio played back on iOS, its words lit as they are said" height="560" src="media/ios-playing.png" />
+  <img alt="The same on Android" height="560" src="media/android-playing.png" />
+</p>
+
 ```sh
 npx expo install @hzblj/expo-speech
 ```

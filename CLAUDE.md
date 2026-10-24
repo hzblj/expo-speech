@@ -8,6 +8,7 @@ and highlighting while the audio plays. Read the package's own `CLAUDE.md` befor
 | --- | --- |
 | `packages/expo-speech/` | The published package: `src/` (JS, hooks, `TranscriptText`), `ios/` (Swift; `ios/Core` also builds as a SwiftPM package for Mac tests), `android/` (Kotlin), `plugin/` (the config plugin). |
 | `apps/example/` | The example: Formula 1 team radio from OpenF1, transcribed on the device and played back with its words lit, built from `@hzblj/kara-ui`. Private. |
+| `media/` | Captures of the example (iOS and Android: radio, playback with its words lit, lab, languages, pit wall; two short playback videos), for the README and the libraries site. Taken from Release builds, status bar at 9:41. |
 | `scripts/pack-check.mjs` | Packs the package as npm gets it, checks what ships, runs the plugin and type-checks a throwaway consumer. |
 | `.changeset/`, `.github/workflows/` | Release notes, CI (Biome, types, tests, pack check) and the changesets release to npm. |
 
