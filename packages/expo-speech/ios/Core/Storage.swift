@@ -35,11 +35,31 @@ public enum TranscriptCache {
 
   public static func read(key: String, locale: String, engine: String, fingerprint: String) -> Transcript? {
     guard
-      let data = try? Data(contentsOf: url(key: key, locale: locale, engine: engine, fingerprint: fingerprint))
+      let data = try? Data(contentsOf: url(key: key, locale: locale, engine: engine, fingerprint: fingerprint)),
+      var transcript = try? JSONDecoder().decode(Transcript.self, from: data)
     else {
       return nil
     }
-    return try? JSONDecoder().decode(Transcript.self, from: data)
+    transcript.audioUri = relocated(transcript.audioUri)
+    return transcript
+  }
+
+  /// The audio in today's container: an update or a reinstall moves the app's container, and with it every absolute
+  /// path the cache wrote. A file of ours is found again by its name; one that is gone leaves no `audioUri`.
+  static func relocated(_ uri: String?) -> String? {
+    guard let uri, let url = URL(string: uri), url.isFileURL else {
+      return uri
+    }
+    if FileManager.default.fileExists(atPath: url.path) {
+      return uri
+    }
+    for folder in [SpeechStorage.audio, SpeechStorage.recordings] {
+      let candidate = folder.appendingPathComponent(url.lastPathComponent)
+      if FileManager.default.fileExists(atPath: candidate.path) {
+        return candidate.absoluteString
+      }
+    }
+    return nil
   }
 
   public static func write(_ transcript: Transcript, key: String, engine: String, fingerprint: String) {

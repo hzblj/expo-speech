@@ -1,4 +1,4 @@
-import {memo, useCallback, useMemo, useRef} from 'react'
+import {useCallback, useMemo, useRef} from 'react'
 import {type StyleProp, Text, type TextProps, type TextStyle} from 'react-native'
 
 import type {Transcript, TranscriptWord} from './types'
@@ -22,28 +22,28 @@ export type TranscriptTextProps = Omit<TextProps, 'children'> & {
   onWordPress?: (word: TranscriptWord, index: number) => void
 }
 
-type Piece = {text: string; word: TranscriptWord | null; index: number; volatile: boolean}
+/** A stretch of the text: a word (with its index among the words) or what lies between words. */
+type Piece = {text: string; index: number; volatile: boolean}
 
 type WordState = 'spoken' | 'active' | 'upcoming'
 
-type WordProps = {
-  text: string
-  index: number
-  state: WordState
-  volatile: boolean
-  styles: Record<WordState | 'volatile', StyleProp<TextStyle>>
-  onPress: ((index: number) => void) | null
-}
+/** Consecutive pieces that look the same, rendered as one span. */
+type Group = {key: string; state: WordState; volatile: boolean; pieces: Piece[]}
 
-const Word = memo(({index, onPress, state, styles, text, volatile}: WordProps) => (
-  <Text onPress={onPress ? () => onPress(index) : undefined} style={[styles[state], volatile && styles.volatile]}>
-    {text}
-  </Text>
-))
+const pieceState = (piece: Piece, previous: WordState, wordIndex: number): WordState => {
+  if (piece.index < 0) {
+    // Between words: like the word before, so the active word's highlight doesn't spill onto the space after it.
+    return previous === 'active' ? 'upcoming' : previous
+  }
+  return piece.index < wordIndex ? 'spoken' : piece.index === wordIndex ? 'active' : 'upcoming'
+}
 
 /**
  * A transcript as one paragraph of text whose words take a style by where playback is: spoken, active or upcoming.
- * Karaoke captions, in short. Only the words whose state changes re-render.
+ * Karaoke captions, in short.
+ *
+ * Words that look the same share one span, so a long transcript stays a handful of spans: Android styles at most 255
+ * span operations per text. With `onWordPress`, each word is a span of its own inside them, unstyled, to be pressed.
  */
 export const TranscriptText = ({
   activeWordStyle,
@@ -65,16 +65,15 @@ export const TranscriptText = ({
 
       for (const word of segment.words) {
         if (word.range[0] > cursor) {
-          result.push({index: -1, text: transcript.text.slice(cursor, word.range[0]), volatile, word: null})
+          result.push({index: -1, text: transcript.text.slice(cursor, word.range[0]), volatile})
         }
-
-        result.push({index, text: word.text, volatile, word})
+        result.push({index, text: transcript.text.slice(word.range[0], word.range[1]), volatile})
         cursor = word.range[1]
         index += 1
       }
 
       if (segment.range[1] > cursor) {
-        result.push({index: -1, text: transcript.text.slice(cursor, segment.range[1]), volatile, word: null})
+        result.push({index: -1, text: transcript.text.slice(cursor, segment.range[1]), volatile})
         cursor = segment.range[1]
       }
     }
@@ -82,40 +81,61 @@ export const TranscriptText = ({
     return result
   }, [transcript])
 
+  const words = useMemo(() => transcript.segments.flatMap(segment => segment.words), [transcript])
+
+  const groups = useMemo(() => {
+    const result: Group[] = []
+    let previous: WordState = wordIndex >= 0 ? 'spoken' : 'upcoming'
+
+    for (const [position, piece] of pieces.entries()) {
+      const state = pieceState(piece, previous, wordIndex)
+      const last = result[result.length - 1]
+
+      if (last && last.state === state && last.volatile === piece.volatile) {
+        last.pieces.push(piece)
+      } else {
+        result.push({key: `${position}`, pieces: [piece], state, volatile: piece.volatile})
+      }
+      previous = state
+    }
+
+    return result
+  }, [pieces, wordIndex])
+
   const styles = useMemo(
     () => ({active: activeWordStyle, spoken: spokenWordStyle, upcoming: upcomingWordStyle, volatile: volatileStyle}),
     [activeWordStyle, spokenWordStyle, upcomingWordStyle, volatileStyle]
   )
 
-  const latest = useRef({onWordPress, pieces})
+  const latest = useRef({onWordPress, words})
 
-  latest.current = {onWordPress, pieces}
+  latest.current = {onWordPress, words}
 
-  const onPress = useCallback((index: number) => {
-    const piece = latest.current.pieces.find(candidate => candidate.index === index)
+  const press = useCallback((index: number) => {
+    const word = latest.current.words[index]
 
-    if (piece?.word) {
-      latest.current.onWordPress?.(piece.word, index)
+    if (word) {
+      latest.current.onWordPress?.(word, index)
     }
   }, [])
 
   return (
     <Text {...props}>
-      {pieces.map((piece, position) =>
-        piece.word ? (
-          <Word
-            index={piece.index}
-            key={position}
-            onPress={onWordPress ? onPress : null}
-            state={piece.index < wordIndex ? 'spoken' : piece.index === wordIndex ? 'active' : 'upcoming'}
-            styles={styles}
-            text={piece.text}
-            volatile={piece.volatile}
-          />
-        ) : (
-          piece.text
-        )
-      )}
+      {groups.map(group => (
+        <Text key={group.key} style={[styles[group.state], group.volatile && styles.volatile]}>
+          {onWordPress
+            ? group.pieces.map((piece, position) =>
+                piece.index >= 0 ? (
+                  <Text key={position} onPress={() => press(piece.index)}>
+                    {piece.text}
+                  </Text>
+                ) : (
+                  piece.text
+                )
+              )
+            : group.pieces.map(piece => piece.text).join('')}
+        </Text>
+      ))}
     </Text>
   )
 }

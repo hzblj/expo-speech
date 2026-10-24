@@ -20,6 +20,10 @@ import java.util.Locale
  * and a locale counts as installed when recognition is available at all.
  */
 class SpeechLocales(private val context: Context) {
+  companion object {
+    private val cached = mutableMapOf<Boolean, RecognitionSupport>()
+  }
+
   private fun normalized(tag: String) = Locale.forLanguageTag(tag.replace('_', '-')).toLanguageTag().lowercase()
 
   private fun createRecognizer(onDevice: Boolean): SpeechRecognizer? = when {
@@ -34,8 +38,20 @@ class SpeechLocales(private val context: Context) {
     locale?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
   }
 
-  private suspend fun support(onDevice: Boolean): RecognitionSupport? {
+  /** Asked once per process and recognizer kind, and again after an install: each check binds and drops the service. */
+  private suspend fun support(onDevice: Boolean, fresh: Boolean = false): RecognitionSupport? {
     if (Build.VERSION.SDK_INT < 33) return null
+    if (!fresh) {
+      synchronized(cached) { cached[onDevice] }?.let { return it }
+    }
+    val support = check(onDevice)
+    if (support != null) {
+      synchronized(cached) { cached[onDevice] = support }
+    }
+    return support
+  }
+
+  private suspend fun check(onDevice: Boolean): RecognitionSupport? {
     return withContext(Dispatchers.Main) {
       val recognizer = createRecognizer(onDevice) ?: return@withContext null
       val result = CompletableDeferred<RecognitionSupport?>()
@@ -83,12 +99,18 @@ class SpeechLocales(private val context: Context) {
     }
     val support = support(options.onDevice) ?: return "unsupported"
     val wanted = normalized(locale)
+    // A cached answer that says pending or missing may be stale: ask again.
+    val current = if (support.installedOnDeviceLanguages.none { normalized(it) == wanted }) {
+      support(options.onDevice, fresh = true) ?: support
+    } else {
+      support
+    }
     fun List<String>.has() = any { normalized(it) == wanted }
     return when {
-      support.installedOnDeviceLanguages.has() -> "installed"
-      !options.onDevice && support.onlineLanguages.has() -> "installed"
-      support.pendingOnDeviceLanguages.has() -> "downloading"
-      support.supportedOnDeviceLanguages.has() -> "supported"
+      current.installedOnDeviceLanguages.has() -> "installed"
+      !options.onDevice && current.onlineLanguages.has() -> "installed"
+      current.pendingOnDeviceLanguages.has() -> "downloading"
+      current.supportedOnDeviceLanguages.has() -> "supported"
       else -> "unsupported"
     }
   }
@@ -115,6 +137,7 @@ class SpeechLocales(private val context: Context) {
         recognizer.destroy()
       }
     }
+    synchronized(cached) { cached.clear() }
   }
 
   @RequiresApi(34)

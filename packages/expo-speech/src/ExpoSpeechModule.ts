@@ -80,8 +80,8 @@ type ExpoSpeechEvents = {
 declare class ExpoSpeechNativeModule extends NativeModule<ExpoSpeechEvents> {
   SpeechTranscriber: typeof SpeechTranscriber
   Transcription: typeof Transcription
-  getPermissionsAsync(microphone: boolean): Promise<SpeechPermissionResponse>
-  requestPermissionsAsync(microphone: boolean): Promise<SpeechPermissionResponse>
+  getPermissionsAsync(microphone: boolean, speechRecognition: boolean | null): Promise<SpeechPermissionResponse>
+  requestPermissionsAsync(microphone: boolean, speechRecognition: boolean | null): Promise<SpeechPermissionResponse>
   getAvailabilityAsync(options: LocaleOptions): Promise<SpeechAvailability>
   getSupportedLocalesAsync(options: LocaleOptions): Promise<string[]>
   getInstalledLocalesAsync(options: LocaleOptions): Promise<string[]>

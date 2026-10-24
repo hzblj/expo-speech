@@ -84,7 +84,8 @@ class TranscriptionObject(
         send("progress", mapOf("phase" to "downloading", "fraction" to fraction))
       }
       setState("preparing")
-      val decoder = AudioDecoder(local, options.rangeStart, options.rangeEnd)
+      // Opened once for the length and the range, then let go: each feed decodes with a decoder of its own.
+      val decoder = AudioDecoder(local, options.rangeStart, options.rangeEnd).also { it.release() }
       synchronized(lock) {
         assembler.duration = decoder.duration
         assembler.audioUri = android.net.Uri.fromFile(local).toString()
@@ -93,7 +94,13 @@ class TranscriptionObject(
       setState("transcribing")
       engine.run(
         EngineAudio.Stream(
-          feed = { write -> decoder.decode { samples, _ -> write(samples); !cancelRequested } },
+          // A new decoder per feed: a session the service dropped before it started is fed again from the start.
+          feed = { write ->
+            AudioDecoder(local, options.rangeStart, options.rangeEnd).decode { samples, _ ->
+              write(samples)
+              !cancelRequested
+            }
+          },
           offset = range.start,
           duration = if (decoder.duration > 0) minOf(range.endInclusive, decoder.duration) - range.start else null
         ),

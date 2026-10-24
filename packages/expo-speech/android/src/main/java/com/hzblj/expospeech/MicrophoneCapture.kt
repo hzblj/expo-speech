@@ -56,7 +56,6 @@ class MicrophoneCapture(
     val buffer = ShortArray(RECOGNIZER_SAMPLE_RATE / 10)
     var samples = 0L
     var lastVolume = 0L
-
     try {
       record.startRecording()
       while (!stopped && coroutineContext.isActive) {

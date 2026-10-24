@@ -59,11 +59,12 @@ class ExpoSpeechModule : Module() {
 
     Events("installProgress")
 
-    AsyncFunction("getPermissionsAsync") Coroutine { microphone: Boolean ->
+    // The second argument is iOS's speech recognition, which Android has no permission for.
+    AsyncFunction("getPermissionsAsync") Coroutine { microphone: Boolean, _: Boolean? ->
       permissions(microphone, ask = false)
     }
 
-    AsyncFunction("requestPermissionsAsync") Coroutine { microphone: Boolean ->
+    AsyncFunction("requestPermissionsAsync") Coroutine { microphone: Boolean, _: Boolean? ->
       permissions(microphone, ask = true)
     }
 

@@ -4,8 +4,13 @@ import android.speech.SpeechRecognizer
 import expo.modules.kotlin.exception.CodedException
 
 /** An error with one of the codes of `SpeechErrorCode` in `src/types.ts`; a JavaScript error with that `code`. */
-class SpeechFailure(val reason: String, message: String, cause: Throwable? = null) :
-  CodedException(reason, message, cause) {
+class SpeechFailure(
+  val reason: String,
+  message: String,
+  cause: Throwable? = null,
+  /** The recognition service went away before the session started: a new session may well work. */
+  val retryable: Boolean = false
+) : CodedException(reason, message, cause) {
 
   fun toMap(): Map<String, Any?> = mapOf("code" to reason, "message" to (message ?: reason))
 

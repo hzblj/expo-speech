@@ -36,6 +36,11 @@ class AudioDecoder(private val file: File, private val start: Double? = null, pr
     duration = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) / 1_000_000.0 else 0.0
   }
 
+  /** Lets go of the file without decoding it. */
+  fun release() {
+    extractor.release()
+  }
+
   /** The seconds of the file that are read. */
   val range: ClosedFloatingPointRange<Double>
     get() = (start ?: 0.0)..(end ?: if (duration > 0) duration else Double.MAX_VALUE)

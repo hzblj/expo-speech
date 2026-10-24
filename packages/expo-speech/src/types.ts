@@ -354,7 +354,10 @@ export type SpeechPermissionResponse = {
   granted: boolean
   canAskAgain: boolean
   expires: 'never'
-  /** iOS: speech recognition (`SFSpeechRecognizer`). Android has no such permission and reports `granted`. */
+  /**
+   * iOS: speech recognition, which only `SFSpeechRecognizer` needs. Android has no such permission and reports
+   * `granted`.
+   */
   speechRecognition: PermissionStatus
   microphone: PermissionStatus
 }

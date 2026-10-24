@@ -61,6 +61,9 @@ public final class MicrophoneCapture: @unchecked Sendable {
 
     do {
       #if os(iOS)
+        guard AVAudioSession.sharedInstance().isInputAvailable else {
+          throw SpeechFailure(.audio, "There is no microphone input")
+        }
         if configuration.managesAudioSession {
           let session = AVAudioSession.sharedInstance()
           try session.setCategory(

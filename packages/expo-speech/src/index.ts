@@ -16,7 +16,7 @@ export {
   useTranscriptPlayback,
 } from './hooks'
 export {followPlayer, PlaybackFollower, type PlaybackFollowerOptions, type PlaybackSource} from './playback'
-export {Speech} from './Speech'
+export {type PermissionOptions, Speech} from './Speech'
 export {TranscriptText, type TranscriptTextProps} from './TranscriptText'
 export {
   applyTranscriptUpdate,

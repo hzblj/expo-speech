@@ -16,10 +16,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
@@ -191,7 +193,10 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     modelLock.withLock {
       if (modelReady) return
       val locales = SpeechLocales(context)
-      when (locales.status(locale, LocaleOptions(options.mode, onDevice = true))) {
+      val status = locales.status(locale, LocaleOptions(options.mode, onDevice = true))
+      // The check's recognizer was just let go of; give the service a moment before the session binds to it.
+      delay(300)
+      when (status) {
         "installed" -> {}
         "unsupported" -> throw SpeechFailure(
           SpeechFailure.LOCALE_UNAVAILABLE, "The on-device recognizer has no model for $locale"
@@ -219,66 +224,105 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
   companion object {
     /** Google's on-device service runs one session at a time; a second fails with ERROR_RECOGNIZER_BUSY. */
     private val sessions = Mutex()
+
+    /** How long the audio may take to start: a microphone that delivers nothing by then is a failure. */
+    private const val FIRST_AUDIO_TIMEOUT_MILLIS = 8_000L
   }
 
-  private suspend fun runStream(audio: EngineAudio.Stream, sink: EngineSink) = coroutineScope {
+  /**
+   * A session over a stream, tried again (twice at most) when the service drops before it starts: a service that
+   * another client just let go of can disconnect the next one. `feed` starts over each time.
+   */
+  private suspend fun runStream(audio: EngineAudio.Stream, sink: EngineSink) {
     if (Build.VERSION.SDK_INT < 33) {
       throw SpeechFailure(SpeechFailure.UNSUPPORTED, "Transcribing audio from a file needs Android 13")
     }
+    var attempt = 0
+    while (true) {
+      try {
+        return streamSession(audio, sink)
+      } catch (failure: SpeechFailure) {
+        if (!failure.retryable || attempt >= 2) throw failure
+        attempt += 1
+        delay(400L * attempt)
+      }
+    }
+  }
 
+  private suspend fun streamSession(audio: EngineAudio.Stream, sink: EngineSink) = coroutineScope {
     val (read, write) = ParcelFileDescriptor.createPipe()
+    val output = ParcelFileDescriptor.AutoCloseOutputStream(write)
     val fed = AtomicLong(0)
     val clock = { audio.offset + fed.get().toDouble() / RECOGNIZER_SAMPLE_RATE }
     val done = CompletableDeferred<Unit>()
+    val firstAudio = CompletableDeferred<Unit>()
     val listener = Listener(sink, done, clock, audio.offset)
-
-    val recognizer = withContext(Dispatchers.Main) {
-      createRecognizer().apply {
-        setRecognitionListener(listener)
-        startListening(intent(read, microphone = audio.duration == null))
-      }
-    }
 
     // A file is fed no faster than `feedSpeed` times real time: Google's on-device recognizer, fed at full speed,
     // finalizes segments late and drops some. The microphone comes in real time anyway.
     val speed = if (audio.duration != null) options.android.feedSpeed else Double.POSITIVE_INFINITY
-    val started = System.nanoTime()
 
+    // The audio starts first, and the recognizer once it flows: an empty pipe at the start reads as the end of the
+    // audio to Google's recognizer, and a microphone takes a moment to open. Until then the pipe holds the audio.
     val writer = launch(Dispatchers.IO) {
+      val started = System.nanoTime()
       try {
-        ParcelFileDescriptor.AutoCloseOutputStream(write).use { output ->
+        output.use { stream ->
           audio.feed { samples ->
-            output.write(samples.toLittleEndianBytes())
+            stream.write(samples.toLittleEndianBytes())
             val total = fed.addAndGet(samples.size.toLong())
+            firstAudio.complete(Unit)
             if (speed.isFinite()) {
               val due = (total.toDouble() / RECOGNIZER_SAMPLE_RATE / speed * 1000).toLong()
               val elapsed = (System.nanoTime() - started) / 1_000_000
               if (due > elapsed) Thread.sleep(due - elapsed)
             }
-            audio.duration?.takeIf { it > 0 }?.let { total ->
-              sink.progress(minOf(1.0, (clock() - audio.offset) / total) * 0.99, "transcribing")
+            audio.duration?.takeIf { it > 0 }?.let { length ->
+              sink.progress(minOf(1.0, (clock() - audio.offset) / length) * 0.99, "transcribing")
             }
           }
         }
         listener.audioEnded = true
+        firstAudio.complete(Unit)
       } catch (_: IOException) {
         // The recognizer closed its end: it finished or failed, and says which through the listener.
+      } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
+      } catch (error: Throwable) {
+        // The audio failed (the microphone, a decoder): that is why the session ends, not the "no speech" the
+        // recognizer reports for a closed pipe.
+        val failure = SpeechFailure.from(error)
+        firstAudio.completeExceptionally(failure)
+        done.completeExceptionally(failure)
       }
     }
 
+    var recognizer: SpeechRecognizer? = null
     try {
+      withTimeoutOrNull(FIRST_AUDIO_TIMEOUT_MILLIS) { firstAudio.await() }
+        ?: throw SpeechFailure(SpeechFailure.AUDIO, "No audio came from the microphone")
+
+      recognizer = withContext(Dispatchers.Main) {
+        createRecognizer().apply {
+          setRecognitionListener(listener)
+          startListening(intent(read, microphone = audio.duration == null))
+        }
+      }
+
       done.await()
       if (audio.duration != null) {
         sink.progress(1.0, "transcribing")
       }
     } finally {
       writer.cancel()
-      withContext(NonCancellable + Dispatchers.Main) {
-        recognizer.cancel()
-        recognizer.destroy()
+      recognizer?.let {
+        withContext(NonCancellable + Dispatchers.Main) {
+          it.cancel()
+          it.destroy()
+        }
       }
       runCatching { read.close() }
-      runCatching { write.close() }
+      runCatching { output.close() }
     }
   }
 
@@ -323,11 +367,14 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     private val offset: Double
   ) : RecognitionListener {
     @Volatile var audioEnded = false
+    private var ready = false
     private var lastEnd = offset
     private var language: String? = null
     private var gotResults = false
 
-    override fun onReadyForSpeech(params: Bundle?) {}
+    override fun onReadyForSpeech(params: Bundle?) {
+      ready = true
+    }
 
     override fun onBeginningOfSpeech() {
       if (options.detectSpeech != null) sink.speech(true, clock())
@@ -349,6 +396,9 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
         SpeechFailure.isNoSpeech(error) -> done.complete(Unit)
         // A client error once all the audio went in (and results came) is the session ending, not a failure.
         error == SpeechRecognizer.ERROR_CLIENT && (audioEnded || gotResults) -> done.complete(Unit)
+        error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED && !ready && !gotResults -> done.completeExceptionally(
+          SpeechFailure(SpeechFailure.SERVICE, "The recognition service disconnected before it started", retryable = true)
+        )
         else -> done.completeExceptionally(SpeechFailure.fromRecognizer(error))
       }
     }

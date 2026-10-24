@@ -19,12 +19,98 @@ import {Caption} from '../ui/karaoke'
 
 const MODES: SpeechMode[] = ['transcription', 'dictation']
 
+/** English names for what the engines offer, where the JavaScript engine has no `Intl.DisplayNames` (Hermes). */
+const LANGUAGES: Record<string, string> = {
+  ar: 'Arabic',
+  ca: 'Catalan',
+  cmn: 'Mandarin',
+  cs: 'Czech',
+  da: 'Danish',
+  de: 'German',
+  el: 'Greek',
+  en: 'English',
+  es: 'Spanish',
+  fi: 'Finnish',
+  fr: 'French',
+  he: 'Hebrew',
+  hi: 'Hindi',
+  hr: 'Croatian',
+  hu: 'Hungarian',
+  id: 'Indonesian',
+  it: 'Italian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  ms: 'Malay',
+  nb: 'Norwegian',
+  nl: 'Dutch',
+  pl: 'Polish',
+  pt: 'Portuguese',
+  ro: 'Romanian',
+  ru: 'Russian',
+  sk: 'Slovak',
+  sv: 'Swedish',
+  th: 'Thai',
+  tr: 'Turkish',
+  uk: 'Ukrainian',
+  vi: 'Vietnamese',
+  wuu: 'Wu',
+  yue: 'Cantonese',
+  zh: 'Chinese',
+}
+
+const REGIONS: Record<string, string> = {
+  AE: 'United Arab Emirates',
+  AT: 'Austria',
+  AU: 'Australia',
+  BE: 'Belgium',
+  BR: 'Brazil',
+  CA: 'Canada',
+  CH: 'Switzerland',
+  CL: 'Chile',
+  CN: 'China',
+  CO: 'Colombia',
+  CZ: 'Czechia',
+  DE: 'Germany',
+  DK: 'Denmark',
+  ES: 'Spain',
+  FI: 'Finland',
+  FR: 'France',
+  GB: 'United Kingdom',
+  HK: 'Hong Kong',
+  IE: 'Ireland',
+  IN: 'India',
+  IT: 'Italy',
+  JP: 'Japan',
+  KR: 'South Korea',
+  MX: 'Mexico',
+  NL: 'Netherlands',
+  NO: 'Norway',
+  NZ: 'New Zealand',
+  PL: 'Poland',
+  PT: 'Portugal',
+  RU: 'Russia',
+  SA: 'Saudi Arabia',
+  SE: 'Sweden',
+  SG: 'Singapore',
+  TR: 'Türkiye',
+  TW: 'Taiwan',
+  US: 'United States',
+  ZA: 'South Africa',
+}
+
 const languageName = (tag: string) => {
   try {
-    return new Intl.DisplayNames(['en'], {type: 'language'}).of(tag) ?? tag
+    const name = new Intl.DisplayNames(['en'], {type: 'language'}).of(tag)
+    if (name && name !== tag) {
+      return name
+    }
   } catch {
-    return tag
+    // Hermes: the table below.
   }
+  const parts = tag.split('-')
+  const language = LANGUAGES[parts[0] ?? ''] ?? parts[0] ?? tag
+  const region = parts.map(part => REGIONS[part]).find(Boolean)
+  return region ? `${language} (${region})` : language
 }
 
 const Capabilities = ({availability}: {availability: SpeechAvailability | null}) => {

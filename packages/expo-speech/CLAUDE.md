@@ -27,6 +27,14 @@ Caches (`expo-speech/transcripts`, keyed by key, locale, engine and the options 
 there at once, without queueing. Remote audio is downloaded once per URL (`expo-speech/audio`), shared between
 concurrent requests.
 
+**`TranscriptText` groups words into spans.** Consecutive words with the same state share one styled span; with
+`onWordPress` each word is an unstyled span inside them, only to be pressed. Android styles at most 255 span
+operations per text ("Text tree size exceeded the limit"), which a span per styled word passes at about 30 words.
+
+**Permissions.** Speech recognition authorization is `SFSpeechRecognizer`'s alone (SpeechAnalyzer transcribes without
+it, measured on macOS 26), so `requestPermissionsAsync` asks for it only where that engine runs unless told to; its
+system prompt says the audio goes to Apple, which on iOS 26 it doesn't.
+
 **Playback is JavaScript only.** `PlaybackFollower` (`src/playback.ts`) dead-reckons the player's time from its last
 report and wakes exactly at the next word: no polling, no dependency on expo-audio (anything with `currentTime`,
 `playing` and the events expo-audio or expo-video send works).
@@ -50,6 +58,10 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
   ended as if stopped when a call interrupts (the transcript is finalized; the error says `interrupted`).
 - **Locks.** `NSLock` is not reentrant: read a locked property (`locale`, `state`) before taking the same lock. A nested
   lock on the JS thread froze the app once.
+- **The simulator's microphone** goes through the Mac's CoreAudio: without microphone access for the Simulator app,
+  `AVAudioEngine.inputNode` hangs and CoreAudio aborts the app ("Cleanup: RPC timeout. Apparently deadlocked"). Not
+  ours to fix; test `listen` on a device or after allowing the Simulator the microphone. The emulator's microphone
+  waits on the same kind of host permission (`AudioRecord` blocks; the session fails with `audio` after 8 s).
 
 ## Android (`android/`)
 
@@ -58,8 +70,23 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
   (Android 13): PCM in a pipe, in a segmented session that ends when the pipe closes, so long audio is never cut at the
   first pause. Word times come from `RECOGNITION_PARTS` (Android 14): a part gives only its start, so it ends at the next
   part's start or after a time for its length, whichever is first. Every `SpeechRecognizer` call is on the main thread.
+- **What Google's on-device recognizer (`com.google.android.as`, "Soda") needs, all measured on an Android 17
+  emulator:**
+  - *Paced files.* Fed at full speed it finalizes segments in a burst at the end and drops whole sentences; at
+    `android.feedSpeed` (4× real time) every one comes through (a 17.6 s clip in about 6 s).
+  - *Audio before the session.* An empty pipe at the start reads as the end of the audio ("no speech" within 40 ms),
+    so the audio starts first and the recognizer once the first chunk is in the pipe; nothing in 8 s is an `audio`
+    error. A writer that fails fails the session with its own error, never the "no speech" the closed pipe causes.
+  - *One session at a time* (`getMaxConcurrentSessionsCount`): a second gets ERROR_RECOGNIZER_BUSY, so sessions share
+    a process-wide mutex; downloads and decoding still run in parallel.
+  - *Don't bind and drop the service right before a session*: `checkRecognitionSupport`'s recognizer, destroyed, can
+    take the service down under the next one (ERROR_SERVER_DISCONNECTED before `onReadyForSpeech`). Locale checks are
+    cached per process, the engine waits 300 ms after one, and such a session is retried (twice) with fresh audio.
+  - *Models*: a missing locale is installed before the first session (`triggerModelDownload`, which shows the system's
+    own "Download English (UK) update" dialog); its progress is the `installing` phase.
+  - Confidence: the on-device recognizer reports 0 for everything, read as unknown.
 - **`AudioDecoder`**: `MediaExtractor` and `MediaCodec` to PCM, then `Resampler` (mixdown, windowed-sinc low-pass,
-  linear interpolation) to 16 kHz mono.
+  linear interpolation) to 16 kHz mono. One decoder per feed, so a retried session starts the file over.
 - **`MicrophoneCapture`**: `AudioRecord` (VOICE_RECOGNITION) into the same pipe, a WAV writer and a meter. Before
   Android 13 the recognizer's own microphone runs instead, restarted after each utterance until `stop`.
 - The library manifest's `<queries>` for `android.speech.RecognitionService` is what lets Android 11+ find the service.

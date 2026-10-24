@@ -14,6 +14,7 @@ played back with its words lit. Built from `@hzblj/kara-ui` like every hzblj exa
 | `src/speech.ts` | The radio transcriber: British English, the session's driver names and pit wall jargon as contextual strings. |
 | `src/ui/` | `Page`, `Section`, `TabStack`, and `karaoke.tsx` (`Karaoke`, `WordTrack`, `Caption`, `formatDuration`). |
 | `assets/icons/` | Material Symbols SVGs, turned into native assets by kara's plugin at prebuild. |
+| `assets/icon.png`, `assets/adaptive-icon.png` | The app icon: a speech bubble with a waveform, from plain shapes, on Formula 1 red (iOS); the bubble alone on `ICON_BACKGROUND` (Android). |
 
 **No Formula 1 media in the repo.** The recordings, headshots and session data come from OpenF1 and formula1.com while
 the app runs; nothing of theirs is committed.

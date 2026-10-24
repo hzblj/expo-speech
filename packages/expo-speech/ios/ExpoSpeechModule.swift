@@ -29,12 +29,12 @@ public final class ExpoSpeechModule: Module {
 
     Events("installProgress")
 
-    AsyncFunction("getPermissionsAsync") { (microphone: Bool) -> [String: Any] in
-      Permissions.response(microphone: microphone)
+    AsyncFunction("getPermissionsAsync") { (microphone: Bool, speechRecognition: Bool?) -> [String: Any] in
+      Permissions.response(microphone: microphone, speechRecognition: speechRecognition ?? Permissions.speechNeeded)
     }
 
-    AsyncFunction("requestPermissionsAsync") { (microphone: Bool) async -> [String: Any] in
-      await Permissions.request(microphone: microphone)
+    AsyncFunction("requestPermissionsAsync") { (microphone: Bool, speechRecognition: Bool?) async -> [String: Any] in
+      await Permissions.request(microphone: microphone, speechRecognition: speechRecognition ?? Permissions.speechNeeded)
     }
 
     AsyncFunction("getAvailabilityAsync") { (options: [String: Any]) async throws -> [String: Any] in
@@ -238,10 +238,15 @@ enum Permissions {
     }
   }
 
-  static func response(microphone: Bool) -> [String: Any] {
+  /** Speech recognition authorization is `SFSpeechRecognizer`'s: SpeechAnalyzer (iOS 26) runs without it. */
+  static var speechNeeded: Bool {
+    !SpeechEngines.analyzerAvailable
+  }
+
+  static func response(microphone: Bool, speechRecognition: Bool) -> [String: Any] {
     let speech = speechStatus()
     let mic = microphoneStatus()
-    let statuses = microphone ? [speech, mic] : [speech]
+    let statuses = (speechRecognition ? [speech] : []) + (microphone ? [mic] : [])
     let status =
       statuses.contains("denied") ? "denied" : statuses.allSatisfy { $0 == "granted" } ? "granted" : "undetermined"
 
@@ -255,8 +260,8 @@ enum Permissions {
     ]
   }
 
-  static func request(microphone: Bool) async -> [String: Any] {
-    if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+  static func request(microphone: Bool, speechRecognition: Bool) async -> [String: Any] {
+    if speechRecognition, SFSpeechRecognizer.authorizationStatus() == .notDetermined {
       await withCheckedContinuation { continuation in
         SFSpeechRecognizer.requestAuthorization { _ in continuation.resume() }
       }
@@ -270,6 +275,6 @@ enum Permissions {
         }
       }
     }
-    return response(microphone: microphone)
+    return response(microphone: microphone, speechRecognition: speechRecognition)
   }
 }

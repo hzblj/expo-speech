@@ -3,14 +3,21 @@ import type {ExpoConfig} from 'expo/config'
 // Not "Expo Speech": the generated Xcode target would be `ExpoSpeech`, the Swift module of the package's native module.
 const NAME = 'Speech Example'
 const BUNDLE_ID = 'com.hzblj.expospeech.example'
+// The middle of the iOS icon's red: what the Android icon's speech bubble sits on.
+const ICON_BACKGROUND = '#d1150d'
 
 export default {
   android: {
+    adaptiveIcon: {
+      backgroundColor: ICON_BACKGROUND,
+      foregroundImage: './assets/adaptive-icon.png',
+    },
     package: BUNDLE_ID,
   },
   experiments: {
     typedRoutes: true,
   },
+  icon: './assets/icon.png',
   ios: {
     bundleIdentifier: BUNDLE_ID,
     supportsTablet: true,

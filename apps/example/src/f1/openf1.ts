@@ -59,12 +59,23 @@ export const fetchOpenF1 = <T>(path: string): Promise<T> => {
     return cached as Promise<T>
   }
 
-  const request = fetch(`${BASE}/${path}`).then(async response => {
-    if (!response.ok) {
-      throw new Error(`OpenF1 answered ${response.status} for ${path}`)
+  const request = (async () => {
+    // OpenF1 limits how often it is asked: wait as long as it says (or longer each time) and ask again.
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await fetch(`${BASE}/${path}`)
+
+      if (response.ok) {
+        return (await response.json()) as T
+      }
+      if (response.status !== 429 || attempt === 4) {
+        throw new Error(`OpenF1 answered ${response.status} for ${path}`)
+      }
+
+      const retryAfter = Number(response.headers.get('retry-after'))
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt
+      await new Promise(resolve => setTimeout(resolve, wait))
     }
-    return (await response.json()) as T
-  })
+  })()
 
   request.catch(() => cache.delete(path))
   cache.set(path, request)

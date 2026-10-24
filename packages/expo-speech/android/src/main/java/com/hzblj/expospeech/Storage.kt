@@ -36,9 +36,18 @@ class TranscriptCache(private val storage: SpeechStorage) {
 
   fun read(key: String, locale: String, fingerprint: String): Transcript? = try {
     val file = file(key, locale, fingerprint)
-    if (file.exists()) Transcript.fromJson(JSONObject(file.readText())) else null
+    if (file.exists()) Transcript.fromJson(JSONObject(file.readText())).let { it.copy(audioUri = relocated(it.audioUri)) } else null
   } catch (_: Exception) {
     null
+  }
+
+  /** The audio where it is now: a file of ours that moved is found again by its name; one that is gone leaves none. */
+  private fun relocated(uri: String?): String? {
+    val path = uri?.let { Uri.parse(it) }?.takeIf { it.scheme == "file" }?.path ?: return uri
+    if (File(path).exists()) return uri
+    val name = File(path).name
+    return listOf(storage.audio, storage.recordings).map { File(it, name) }.firstOrNull { it.exists() }
+      ?.let { Uri.fromFile(it).toString() }
   }
 
   fun write(transcript: Transcript, key: String, fingerprint: String) {

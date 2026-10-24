@@ -8,6 +8,13 @@ import type {
   SpeechPermissionResponse,
 } from './types'
 
+export type PermissionOptions = {
+  /** @default true */
+  microphone?: boolean
+  /** iOS: speech recognition. By default only where `SFSpeechRecognizer` runs: before iOS 26. */
+  speechRecognition?: boolean
+}
+
 const localeOptions = ({mode = 'transcription', onDevice = true}: LocaleOptions = {}) => ({mode, onDevice})
 
 /**
@@ -32,12 +39,14 @@ export const Speech = {
 
   getLocaleStatusAsync: (locale: string, options?: LocaleOptions): Promise<LocaleStatus> =>
     ExpoSpeech.getLocaleStatusAsync(locale, localeOptions(options)),
+
   /**
-   * Speech recognition (iOS) and, with `microphone`, the microphone. Transcribing files needs no permission on iOS 26
-   * and Android; iOS before 26 asks for speech recognition.
+   * The permissions transcribing takes: the microphone (for `listen`), and on iOS speech recognition, which only
+   * `SFSpeechRecognizer` needs (before iOS 26, or with `ios.engine: 'recognizer'`). By default speech recognition is
+   * asked about only where that engine runs; files need no permission at all on iOS 26 and Android.
    */
-  getPermissionsAsync: ({microphone = true}: {microphone?: boolean} = {}): Promise<SpeechPermissionResponse> =>
-    ExpoSpeech.getPermissionsAsync(microphone),
+  getPermissionsAsync: (options: PermissionOptions = {}): Promise<SpeechPermissionResponse> =>
+    ExpoSpeech.getPermissionsAsync(options.microphone ?? true, options.speechRecognition ?? null),
 
   /**
    * iOS 26: the locales the app keeps assets for. The system keeps up to `maximumReservedLocales` per app and reserves
@@ -51,7 +60,8 @@ export const Speech = {
 
   /**
    * Downloads the locale's model. iOS 26: through `AssetInventory`, with progress. Android 13: the recognizer's model
-   * download, with progress from Android 14; on Android 13 it resolves once the download is scheduled.
+   * download, which the system asks the user about, with progress from Android 14; on Android 13 it resolves once
+   * the download is scheduled.
    */
   installLocaleAsync: async (
     locale: string,
@@ -87,8 +97,9 @@ export const Speech = {
   /** Frees a reserved locale, so its assets may go when the system needs the space. */
   releaseLocaleAsync: (locale: string): Promise<boolean> => ExpoSpeech.releaseLocaleAsync(locale),
 
-  requestPermissionsAsync: ({microphone = true}: {microphone?: boolean} = {}): Promise<SpeechPermissionResponse> =>
-    ExpoSpeech.requestPermissionsAsync(microphone),
+  /** Asks for what `getPermissionsAsync` reports, where it has not been answered yet. */
+  requestPermissionsAsync: (options: PermissionOptions = {}): Promise<SpeechPermissionResponse> =>
+    ExpoSpeech.requestPermissionsAsync(options.microphone ?? true, options.speechRecognition ?? null),
 
   reserveLocaleAsync: (locale: string): Promise<boolean> => ExpoSpeech.reserveLocaleAsync(locale),
 }
