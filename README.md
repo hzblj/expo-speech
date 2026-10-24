@@ -47,6 +47,10 @@ yarn pack:check      # pack the package as npm gets it and type-check a consumer
 yarn changeset       # describe a change for the next release
 ```
 
+## More libraries
+
+The other libraries from the same author are at **[libraries.janblazej.dev](https://www.libraries.janblazej.dev)**.
+
 ## License
 
 MIT © Jan Blazej. The example holds the weekend's names, times and links; the audio and photos stream from Formula 1 while it runs, and none of them are part of this repository.

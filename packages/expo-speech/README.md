@@ -206,6 +206,10 @@ Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`,
 
 `apps/example` in the [repository](https://github.com/hzblj/expo-speech) transcribes a Formula 1 weekend's team radio (captured from [OpenF1](https://openf1.org)) on the device, and plays it back with its words lit.
 
+## More libraries
+
+The other libraries from the same author are at **[libraries.janblazej.dev](https://www.libraries.janblazej.dev)**.
+
 ## License
 
 MIT © Jan Blazej
