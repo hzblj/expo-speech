@@ -186,7 +186,7 @@ A transcription installs its locale's model by itself when it is missing; `insta
 
 ## Errors
 
-Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service`, `cancelled` or `unknown`. Audio without speech is not an error: it completes with an empty transcript. A transcription shared through a `cacheKey` is taken off the queue by `useTranscribe` only when the last component following it unmounts.
+Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service`, `cancelled` or `unknown`. Audio without speech is not an error: it completes with an empty transcript. The iOS Simulator often cannot get or run Apple's speech models (the iOS 26.5 and 27.0 runtimes cannot): there a transcription fails as `unsupported`, and a device is the place to try it. A transcription shared through a `cacheKey` is taken off the queue by `useTranscribe` only when the last component following it unmounts.
 
 ## Platform behavior
 

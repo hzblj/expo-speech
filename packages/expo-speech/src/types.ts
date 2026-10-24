@@ -279,7 +279,10 @@ export type TranscriptionState =
 export type SpeechErrorCode =
   /** The user did not allow speech recognition or the microphone. */
   | 'permission-denied'
-  /** The device, the OS version or the engine cannot do what was asked. */
+  /**
+   * The device, the OS version or the engine cannot do what was asked. Also an iOS Simulator that cannot get or run the
+   * speech model, which the iOS 26.5 and 27.0 runtimes cannot.
+   */
   | 'unsupported'
   /** The locale is not supported, or its model is not installed and could not be. */
   | 'locale-unavailable'

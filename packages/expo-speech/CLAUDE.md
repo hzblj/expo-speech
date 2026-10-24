@@ -48,8 +48,10 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
 - **`AnalyzerEngine`** (iOS 26): `SpeechAnalyzer` with `SpeechTranscriber`, or `DictationTranscriber` in dictation mode
   and wherever `SpeechTranscriber.isAvailable` is false (the iOS 26.0 simulator). Assets are installed on demand through
   `AssetInventory` (the `installing` progress phase). Final results keep Apple's per-run `audioTimeRange`; volatile
-  results span the whole revised stretch, so their words are estimated. Contextual strings help dictation only
-  (SpeechTranscriber ignores them; measured).
+  results span the whole revised stretch, so their words are estimated.
+  In the iOS Simulator a model it cannot get or run (`AssetInventory` never installs it on iOS 27.0, no audio format on
+  26.5) fails as `unsupported` with that said (`onSimulator`); on a device the same failures keep their own codes.
+  Contextual strings help dictation only (SpeechTranscriber ignores them; measured).
 - **`RecognizerEngine`**: `SFSpeechRecognizer` before iOS 26 or with `ios.engine: 'recognizer'`. Needs speech
   authorization; `onDevice` fails for a locale without an on-device model instead of using Apple's servers.
 - **`AudioFileReader`** decodes any file AVFoundation reads into the engine's format with `AVAssetReader` (resampling

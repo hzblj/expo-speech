@@ -169,8 +169,28 @@ public final class AnalyzerEngine: SpeechEngine, @unchecked Sendable {
     return context
   }
 
+  /// A model the iOS Simulator could not get or run: the simulator's doing, not the locale's. Some simulator runtimes
+  /// (iOS 26.5's offers no audio format, iOS 27.0's never installs the asset) cannot transcribe at all, where a device
+  /// downloads the same model and does.
+  static func onSimulator(_ failure: SpeechFailure) -> SpeechFailure {
+    #if targetEnvironment(simulator)
+      return SpeechFailure(
+        .unsupported, "Speech recognition is unsupported in this iOS Simulator: transcribe on a device (\(failure.message))")
+    #else
+      return failure
+    #endif
+  }
+
   /// Installs the modules' assets when they are missing, reporting the download as the `installing` phase.
   static func ensureAssets(for modules: [any SpeechModule], download: Bool, sink: EngineSink?) async throws {
+    do {
+      try await installAssets(for: modules, download: download, sink: sink)
+    } catch let failure as SpeechFailure where failure.code == .localeUnavailable {
+      throw onSimulator(failure)
+    }
+  }
+
+  private static func installAssets(for modules: [any SpeechModule], download: Bool, sink: EngineSink?) async throws {
     switch await AssetInventory.status(forModules: modules) {
     case .installed:
       return
@@ -223,7 +243,7 @@ public final class AnalyzerEngine: SpeechEngine, @unchecked Sendable {
     try await Self.ensureAssets(for: modules, download: true, sink: sink)
 
     guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules) else {
-      throw SpeechFailure(.unsupported, "No audio format suits the speech models")
+      throw Self.onSimulator(SpeechFailure(.unsupported, "No audio format suits the speech models"))
     }
 
     let analyzer = SpeechAnalyzer(modules: modules, options: analyzerOptions)
