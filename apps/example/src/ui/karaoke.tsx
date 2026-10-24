@@ -1,5 +1,5 @@
-import type {Transcript, TranscriptWord} from '@hzblj/expo-speech'
-import {Box, type ColorToken, Island, RnText, Text, useAppTheme} from '@hzblj/kara-ui'
+import type {Transcript} from '@hzblj/expo-speech'
+import {type ColorToken, Island, RnText, Text} from '@hzblj/kara-ui'
 import {useMemo} from 'react'
 
 type KaraokeProps = {
@@ -72,42 +72,6 @@ export const Karaoke = ({playing = false, transcript, variant = 'body', wordInde
         ))}
       </Text>
     </Island>
-  )
-}
-
-type WordTrackProps = {
-  words: TranscriptWord[]
-  duration: number
-  time: number
-  color?: ColorToken
-}
-
-/** The player's track with a tick where every word starts, filled up to the playhead. */
-export const WordTrack = ({color = 'content.accent', duration, time, words}: WordTrackProps) => {
-  const theme = useAppTheme()
-  const progress = duration > 0 ? Math.min(1, Math.max(0, time / duration)) : 0
-
-  return (
-    <Box h={14} justify="center" wide>
-      <Box bg="fill.quaternary" borderRadius="full" h={4} overflow="hidden" wide>
-        <Box h={4} style={{backgroundColor: theme.color(color), width: `${progress * 100}%`}} />
-      </Box>
-      {duration > 0
-        ? words.map(word => (
-            <Box
-              key={`${word.range[0]}`}
-              position="absolute"
-              style={{
-                backgroundColor: theme.color(word.start <= time ? color : 'content.tertiary'),
-                height: 10,
-                left: `${(word.start / duration) * 100}%`,
-                top: 2,
-                width: 1.5,
-              }}
-            />
-          ))
-        : null}
-    </Box>
   )
 }
 

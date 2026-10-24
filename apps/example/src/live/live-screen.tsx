@@ -6,12 +6,13 @@ import {
   useTranscription,
   useTranscriptPlayback,
 } from '@hzblj/expo-speech'
+import {useWaveformPlayback, WaveformView} from '@hzblj/expo-waveform'
 import {Box, Pressable, RnIcon, RnScrollView, RnText, useAppTheme} from '@hzblj/kara-ui'
 import {setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus} from 'expo-audio'
 import {useRef, useState} from 'react'
 import {Pressable as HoldPressable} from 'react-native'
 
-import {Caption, formatDuration, Karaoke, WordTrack} from '../ui/karaoke'
+import {Caption, formatDuration, Karaoke} from '../ui/karaoke'
 
 const OPTIONS: SpeechTranscriberOptions = {detectSpeech: true, locale: 'en-GB', mode: 'dictation'}
 
@@ -30,7 +31,8 @@ export const LiveScreen = () => {
   const {error, level, speaking, state, transcript} = useTranscription(transcription)
   const player = useAudioPlayer(null, {updateInterval: 100})
   const status = useAudioPlayerStatus(player)
-  const {getTime, wordIndex} = useTranscriptPlayback(state === 'completed' ? transcript : null, player)
+  const playback = useWaveformPlayback(player)
+  const {wordIndex} = useTranscriptPlayback(state === 'completed' ? transcript : null, player)
   const listening = state === 'transcribing' || state === 'preparing' || state === 'queued'
   const recorded = state === 'completed' && transcript.audioUri
 
@@ -134,10 +136,16 @@ export const LiveScreen = () => {
         )}
         {recorded ? (
           <Box gap="s12">
-            <WordTrack
-              duration={status.duration || transcript.duration || 0}
-              time={getTime()}
-              words={transcript.words}
+            <WaveformView
+              accessibilityLabel="Your message"
+              color={theme.color('content.tertiary')}
+              markers={transcript.words.map(word => word.start)}
+              onSeek={seconds => player.seekTo(seconds)}
+              playback={playback}
+              progress={0}
+              progressColor={theme.color('content.accent')}
+              source={transcript.audioUri ?? undefined}
+              style={{height: 48}}
             />
             <Pressable
               accessibilityLabel={status.playing ? 'Pause' : 'Play the message'}

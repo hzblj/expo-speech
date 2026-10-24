@@ -6,13 +6,13 @@ played back with its words lit. Built from `@hzblj/kara-ui` like every hzblj exa
 | Path | What it is |
 | --- | --- |
 | `app/(tabs)/` | Native tabs (`Tabs` from `@hzblj/kara-ui/router`), each a stack with a large title: Radio, Pit wall, Lab, Languages. Route files only re-export a screen from `src/`. |
-| `src/radio/` | The weekend's sessions as chips and their team radio, newest first: a card per message, transcribed as it comes on screen (`useTranscribe` with the recording URL as `cacheKey`), played inline through one shared expo-audio player with `Karaoke` and `WordTrack`. |
+| `src/radio/` | The weekend's sessions as chips and their team radio, newest first: a card per message, transcribed as it comes on screen (`useTranscribe` with the recording URL as `cacheKey`), played inline through one shared expo-audio player: a play button, the recording as a seekable `WaveformView` (`@hzblj/expo-waveform`) with a tick where every word starts, and `Karaoke` (one Kara `Text`, a span per word, `animate`). |
 | `src/live/` | Hold to talk: `listen({record: true})`, the level as a ring, the live text, then the recording played back with its words lit. |
 | `src/lab/` | Every option against one message, transcribed fresh: segments, confidence, alternatives, each word's time, WebVTT and SRT. |
 | `src/languages/` | What the engine can do here, and the locales: installed first, the rest downloadable with progress. |
 | `src/f1/` | `radio.json`, one weekend captured from OpenF1 by `scripts/radio.mjs`, and `radio.ts`, its sessions, clips and drivers. |
 | `src/speech.ts` | The radio transcriber: British English, the session's driver names and pit wall jargon as contextual strings. |
-| `src/ui/` | `Page`, `Section`, `TabStack`, and `karaoke.tsx` (`Karaoke`, `WordTrack`, `Caption`, `formatDuration`). |
+| `src/ui/` | `Page`, `Section`, `TabStack`, `PlayButton`, and `karaoke.tsx` (`Karaoke`, `Caption`, `formatDuration`). |
 | `assets/icons/` | Material Symbols SVGs, turned into native assets by kara's plugin at prebuild. |
 | `assets/icon.png`, `assets/adaptive-icon.png` | The app icon: a speech bubble with a waveform, from plain shapes, on Formula 1 red (iOS); the bubble alone on `ICON_BACKGROUND` (Android). |
 
@@ -30,3 +30,13 @@ On the iOS 26.0 simulator `SpeechTranscriber` is unavailable and the package fal
 **iOS 27 needs the scene life cycle.** Xcode 27's SDK asserts at launch on an app without `UIApplicationSceneManifest`,
 which Expo 57's template lacks: `expo-build-properties` with `ios.enableSceneSupport` (in `app.config.ts`) starts React
 Native in Expo's scene delegate instead.
+
+**The iOS Simulator shows the Mac's transcripts.** It cannot get or run Apple's speech models (iOS 26.5 offers no audio
+format, 27.0 never installs the asset), so a transcription there fails as `unsupported`. `src/f1/captured.ts` then
+shows the message's transcript from `src/f1/transcripts.json`, made on the Mac by expo-speech's own engine
+(`yarn transcripts` in expo-speech's example, `scripts/transcripts`, a SwiftPM tool over `ios/Core`). Only on the
+simulator (`expo-device`), only for a failed transcription: on a device and on Android the app transcribes for itself.
+
+**Captures start playback by link.** The iOS 27 simulator takes no scripted taps (`idb` cannot reach its HID), so
+`speech-example:///?play=1` plays the selected session's second message, with the app in front (a link from outside asks
+first). Status bar at 9:41 (`xcrun simctl status_bar … override`, Android's demo mode), Release builds.

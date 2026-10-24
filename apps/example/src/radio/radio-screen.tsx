@@ -1,8 +1,9 @@
 import {FlagView} from '@hzblj/expo-flags-kit'
 import {Box, Chip, EmptyState, Island, RnFlatList, RnText} from '@hzblj/kara-ui'
 import {setAudioModeAsync, useAudioPlayer} from 'expo-audio'
+import {useLocalSearchParams} from 'expo-router'
 import {useCallback, useEffect, useRef, useState} from 'react'
-
+import {capture} from '../capture'
 import {DRIVERS, flagCode, MEETING, type RadioClip, SESSIONS} from '../f1/radio'
 import {useRadioTranscriber} from '../speech'
 import {Caption} from '../ui/karaoke'
@@ -65,12 +66,32 @@ export const RadioScreen = () => {
     return () => subscription.remove()
   }, [player])
 
+  const start = useCallback(
+    (clip: RadioClip, at = 0) => {
+      player.replace({uri: clip.url})
+      if (at > 0) {
+        player.seekTo(at)
+      }
+      player.play()
+      setPlaying(clip.id)
+    },
+    [player]
+  )
+
+  // `?play=1` (or the `capturePlay` launch argument) plays the session's second message: how the captures start
+  // playback.
+  const play = useLocalSearchParams<{play?: string}>().play ?? capture.play
+  useEffect(() => {
+    const clip = play === undefined ? undefined : clips[Number(play)]
+    if (clip) {
+      start(clip)
+    }
+  }, [clips, play, start])
+
   const onPlay = useCallback(
-    (clip: RadioClip, audioUri: string) => {
+    (clip: RadioClip) => {
       if (playingRef.current !== clip.id) {
-        player.replace({uri: audioUri})
-        player.play()
-        setPlaying(clip.id)
+        start(clip)
       } else if (player.playing) {
         player.pause()
       } else {
@@ -80,7 +101,19 @@ export const RadioScreen = () => {
         player.play()
       }
     },
-    [player]
+    [player, start]
+  )
+
+  // Scrubbing another message starts it there.
+  const onSeek = useCallback(
+    (clip: RadioClip, time: number) => {
+      if (playingRef.current === clip.id) {
+        player.seekTo(time)
+      } else {
+        start(clip, time)
+      }
+    },
+    [player, start]
   )
 
   return (
@@ -98,7 +131,14 @@ export const RadioScreen = () => {
       flex={1}
       keyExtractor={clip => clip.id}
       renderItem={({item}) => (
-        <RadioCard active={item.id === playing} clip={item} onPlay={onPlay} player={player} transcriber={transcriber} />
+        <RadioCard
+          active={item.id === playing}
+          clip={item}
+          onPlay={onPlay}
+          onSeek={onSeek}
+          player={player}
+          transcriber={transcriber}
+        />
       )}
       testID="radio"
     />
