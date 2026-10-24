@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": [
+    "@hzblj/biome-config",
+    "@hzblj/biome-config/react-native"
+  ],
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.expo",
+      "!**/.turbo",
+      "!**/.pack-check",
+      "!**/build",
+      "!apps/example/ios",
+      "!apps/example/android",
+      "!**/expo-env.d.ts"
+    ]
+  },
+  "overrides": [
+    {
+      "includes": [
+        "**/babel.config.js",
+        "**/metro.config.js",
+        "**/app.plugin.js"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noCommonJs": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "scripts/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ]
+}

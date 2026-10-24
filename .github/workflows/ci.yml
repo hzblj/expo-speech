@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, test, pack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Biome
+        run: yarn biome:check
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      # The transcript model, the playback clock, subtitles and the config plugin, in Node.
+      - name: Test
+        run: yarn test
+
+      # Builds the library, packs it the way npm will receive it, and type-checks real usage from a throwaway
+      # consumer: no `source` condition, only what the tarball declares.
+      - name: Pack check
+        run: yarn pack:check

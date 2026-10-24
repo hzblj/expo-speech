@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The package's TypeScript source, as Metro runs it (metro.config.js maps its `source` export), so the example
+    // type-checks against the package without a build.
+    "paths": {
+      "@hzblj/expo-speech": ["../../packages/expo-speech/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "native-icons.d.ts"]
+}

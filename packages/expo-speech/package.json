@@ -1,0 +1,90 @@
+{
+  "name": "@hzblj/expo-speech",
+  "version": "0.1.0",
+  "description": "Speech to text for Expo on the platforms' own Speech APIs: SpeechAnalyzer on iOS 26 (SFSpeechRecognizer before it) and the on-device SpeechRecognizer on Android. Files and the microphone, per-word timing, a transcription queue with a cache, and highlighting while the audio plays.",
+  "author": "Jan Blazej",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hzblj/expo-speech.git",
+    "directory": "packages/expo-speech"
+  },
+  "bugs": {
+    "url": "https://github.com/hzblj/expo-speech/issues"
+  },
+  "homepage": "https://github.com/hzblj/expo-speech#readme",
+  "keywords": [
+    "android",
+    "captions",
+    "dictation",
+    "expo",
+    "expo-module",
+    "ios",
+    "karaoke",
+    "react-native",
+    "speech",
+    "speech-recognition",
+    "speech-to-text",
+    "speechanalyzer",
+    "subtitles",
+    "transcription"
+  ],
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./plugin": {
+      "types": "./plugin/build/index.d.ts",
+      "default": "./plugin/build/index.js"
+    },
+    "./app.plugin.js": "./app.plugin.js",
+    "./expo-module.config.json": "./expo-module.config.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "android/build.gradle",
+    "android/src/main/**",
+    "app.plugin.js",
+    "build",
+    "expo-module.config.json",
+    "ios/*.podspec",
+    "ios/*.swift",
+    "ios/Core/**",
+    "plugin/build/**"
+  ],
+  "scripts": {
+    "build": "rm -rf build plugin/build && tsc -p ./tsconfig.build.json && tsc -p ./plugin/tsconfig.json",
+    "clean": "rm -rf build plugin/build",
+    "prepack": "yarn run -T turbo run build --filter=$npm_package_name...",
+    "lint": "yarn run -T concurrently \"yarn biome:check\" \"yarn tsc:check\"",
+    "lint:fix": "yarn run -T biome check --write .",
+    "biome:check": "yarn run -T biome check .",
+    "tsc:check": "yarn run -T concurrently \"tsc -p ./tsconfig.json\" \"tsc -p ./plugin/tsconfig.json --noEmit\"",
+    "test": "node --import tsx --test test/*.test.ts plugin/test/*.test.ts",
+    "test:ios": "swift test --package-path ios/Tests",
+    "test:android": "cd ../../apps/example/android && ./gradlew :hzblj-expo-speech:testDebugUnitTest"
+  },
+  "peerDependencies": {
+    "expo": ">=57",
+    "expo-modules-core": "*",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "~19.2.14",
+    "expo": "~57.0.31",
+    "expo-modules-core": "~57.0.24",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

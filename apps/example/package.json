@@ -1,0 +1,47 @@
+{
+  "name": "expo-speech-example",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "expo:prebuild": "yarn workspace @hzblj/expo-speech build && expo prebuild --clean",
+    "clean:native": "rm -rf android ios .expo",
+    "lint": "yarn run -T concurrently \"yarn biome:check\" \"yarn tsc:check\"",
+    "lint:fix": "yarn run -T biome check --write .",
+    "biome:check": "yarn run -T biome check .",
+    "tsc:check": "tsc -p ./tsconfig.json"
+  },
+  "dependencies": {
+    "@expo/ui": "~57.0.26",
+    "@hzblj/expo-flags-kit": "^0.1.0",
+    "@hzblj/expo-speech": "workspace:*",
+    "@hzblj/kara-ui": "^0.13.0",
+    "@lodev09/react-native-true-sheet": "3.11.18",
+    "expo": "~57.0.31",
+    "expo-asset": "~57.0.4",
+    "expo-audio": "~57.0.5",
+    "expo-constants": "~57.0.22",
+    "expo-dev-client": "~57.0.20",
+    "expo-image": "~57.0.5",
+    "expo-linking": "~57.0.13",
+    "expo-router": "~57.0.29",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@types/react": "~19.2.14",
+    "typescript": "~7.0.2"
+  }
+}

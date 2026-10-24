@@ -1,0 +1,19 @@
+{
+  // Config plugins run in Node at prebuild time, never in the app: CommonJS out, no platform resolution.
+  "compilerOptions": {
+    "declaration": true,
+    "esModuleInterop": true,
+    "lib": ["es2022"],
+    "module": "node16",
+    "moduleResolution": "node16",
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "outDir": "./build",
+    "rootDir": "./src",
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2022",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}
