@@ -1,5 +1,11 @@
 # @hzblj/expo-speech
 
+## 0.1.3
+
+### Patch Changes
+
+- [`8d54647`](https://github.com/hzblj/expo-speech/commit/8d54647b9ee8589d603a66e0b9fef2691445dbf4) Thanks [@hzblj](https://github.com/hzblj)! - iOS: in the Simulator, a speech model it cannot download or run now fails as `unsupported`, saying that speech recognition is unsupported in this simulator and to transcribe on a device, instead of `locale-unavailable` ("assistant.en_GB asset unavailable after attempted download") or "No audio format suits the speech models". The iOS 26.5 and 27.0 simulator runtimes cannot transcribe; a device downloads the same model and does.
+
 ## 0.1.2
 
 ### Patch Changes
