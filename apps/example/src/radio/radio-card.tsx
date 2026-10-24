@@ -4,7 +4,6 @@ import {Box, Image, RnIcon, RnText, useAppTheme} from '@hzblj/kara-ui'
 import {type AudioPlayer, useAudioPlayerStatus} from 'expo-audio'
 import {memo, useMemo, useState} from 'react'
 
-import {withCaptured} from '../f1/captured'
 import {type RadioClip, teamColor} from '../f1/radio'
 import {Caption, formatDuration, Karaoke} from '../ui/karaoke'
 import {PlayButton} from '../ui/play-button'
@@ -54,10 +53,9 @@ const ElapsedText = ({seconds}: {seconds: number}) => (
  */
 export const RadioCard = memo(({active, clip, onPlay, onSeek, player, transcriber}: RadioCardProps) => {
   const theme = useAppTheme()
-  const {error, fromCache, progress, progressPhase, state, transcript} = withCaptured(
-    clip.url,
-    useTranscribe(transcriber, clip.url, {cacheKey: clip.url})
-  )
+  const {error, fromCache, progress, progressPhase, state, transcript} = useTranscribe(transcriber, clip.url, {
+    cacheKey: clip.url,
+  })
   const playback = useWaveformPlayback(active ? player : null)
   const {wordIndex} = useTranscriptPlayback(transcript, active ? player : null)
   const driver = clip.driver

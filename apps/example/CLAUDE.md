@@ -31,12 +31,6 @@ On the iOS 26.0 simulator `SpeechTranscriber` is unavailable and the package fal
 which Expo 57's template lacks: `expo-build-properties` with `ios.enableSceneSupport` (in `app.config.ts`) starts React
 Native in Expo's scene delegate instead.
 
-**The iOS Simulator shows the Mac's transcripts.** It cannot get or run Apple's speech models (iOS 26.5 offers no audio
-format, 27.0 never installs the asset), so a transcription there fails as `unsupported`. `src/f1/captured.ts` then
-shows the message's transcript from `src/f1/transcripts.json`, made on the Mac by expo-speech's own engine
-(`yarn transcripts` in expo-speech's example, `scripts/transcripts`, a SwiftPM tool over `ios/Core`). Only on the
-simulator (`expo-device`), only for a failed transcription: on a device and on Android the app transcribes for itself.
-
 **Captures start playback by link.** The iOS 27 simulator takes no scripted taps (`idb` cannot reach its HID), so
 `speech-example:///?play=1` plays the selected session's second message, with the app in front (a link from outside asks
 first). Status bar at 9:41 (`xcrun simctl status_bar … override`, Android's demo mode), Release builds.

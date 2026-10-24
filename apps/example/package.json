@@ -12,8 +12,7 @@
     "lint": "yarn run -T concurrently \"yarn biome:check\" \"yarn tsc:check\"",
     "lint:fix": "yarn run -T biome check --write .",
     "biome:check": "yarn run -T biome check .",
-    "tsc:check": "tsc -p ./tsconfig.json",
-    "transcripts": "swift run --package-path scripts/transcripts transcripts src/f1"
+    "tsc:check": "tsc -p ./tsconfig.json"
   },
   "dependencies": {
     "@expo/ui": "~57.0.26",
@@ -28,7 +27,6 @@
     "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.22",
     "expo-dev-client": "~57.0.20",
-    "expo-device": "~57.0.2",
     "expo-image": "~57.0.5",
     "expo-linking": "~57.0.13",
     "expo-router": "~57.0.29",

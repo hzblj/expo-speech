@@ -5,4 +5,3 @@
 expo-env.d.ts
 # @end expo-cli
 # The transcripts tool's SwiftPM build
-scripts/transcripts/.build/
