@@ -1,6 +1,8 @@
 import {
   type SpeechTranscriberOptions,
   type Transcription,
+  TranscriptText,
+  type TranscriptWord,
   toSRT,
   toWebVTT,
   useSpeechTranscriber,
@@ -16,16 +18,27 @@ import {
   SearchBar,
   SegmentedControl,
   Switch,
+  useAppTheme,
   VStack,
 } from '@hzblj/kara-ui'
 import {useMemo, useState} from 'react'
 import {Platform, Share} from 'react-native'
 
-import {useLatestWeekend, useRadioClips} from '../f1/radio-clips'
-import {Caption, Karaoke} from '../ui/karaoke'
+import {DRIVERS, FIRST_CLIP, SESSIONS} from '../f1/radio'
+import {Caption} from '../ui/karaoke'
 import {Section} from '../ui/page'
 
 const MODES = ['transcription', 'dictation'] as const
+
+/** Every message of the weekend, by session. */
+const CLIPS = SESSIONS.flatMap(session => session.clips)
+
+const OPTIONS = SESSIONS.flatMap(session =>
+  session.clips.map(clip => ({
+    label: `${session.name} · ${clip.driver?.name_acronym ?? '???'} · ${clip.date.toLocaleTimeString('en-GB')}`,
+    value: clip.id,
+  }))
+)
 
 const seconds = (value: number) => `${value.toFixed(2)} s`
 
@@ -34,11 +47,9 @@ const seconds = (value: number) => `${value.toFixed(2)} s`
  * alternatives, every word's time, and the transcript as subtitles.
  */
 export const LabScreen = () => {
-  const weekend = useLatestWeekend()
-  const {clips, drivers} = useRadioClips(weekend.sessions[0]?.session_key ?? null)
   const [clipId, setClipId] = useState<string | null>(null)
   const [customUrl, setCustomUrl] = useState('')
-  const clip = clips.find(candidate => candidate.id === clipId) ?? clips[0]
+  const clip = CLIPS.find(candidate => candidate.id === clipId) ?? FIRST_CLIP
   const source = customUrl.trim() || clip?.url
 
   const [mode, setMode] = useState(0)
@@ -51,28 +62,21 @@ export const LabScreen = () => {
   const options = useMemo<SpeechTranscriberOptions>(
     () => ({
       alternatives,
-      contextualStrings: names ? (drivers ?? []).map(driver => driver.last_name) : [],
+      contextualStrings: names ? DRIVERS.map(driver => driver.last_name) : [],
       detectSpeech,
       locale: 'en-GB',
       mode: MODES[mode],
       onDevice,
       punctuation,
     }),
-    [alternatives, names, drivers, detectSpeech, mode, onDevice, punctuation]
+    [alternatives, names, detectSpeech, mode, onDevice, punctuation]
   )
   const transcriber = useSpeechTranscriber(options)
   const [transcription, setTranscription] = useState<Transcription | null>(null)
+  const [pressed, setPressed] = useState<TranscriptWord | null>(null)
+  const theme = useAppTheme()
   const {error, progress, progressPhase, state, transcript} = useTranscription(transcription)
   const running = state !== null && !['completed', 'failed', 'cancelled'].includes(state)
-
-  const pickerOptions = useMemo(
-    () =>
-      clips.slice(0, 40).map(candidate => ({
-        label: `${candidate.driver?.name_acronym ?? '???'} · ${candidate.date.toLocaleTimeString('en-GB')}`,
-        value: candidate.id,
-      })),
-    [clips]
-  )
 
   return (
     <RnScrollView
@@ -82,12 +86,8 @@ export const LabScreen = () => {
       flex={1}
       testID="lab"
     >
-      <Section caption="From the latest session on OpenF1, or any audio or video file by its URL." title="Message">
-        {pickerOptions.length ? (
-          <Picker onValueChange={setClipId} options={pickerOptions} value={clip?.id ?? ''} />
-        ) : (
-          <RnText color="content.tertiary">Loading the radio…</RnText>
-        )}
+      <Section caption="A message of the weekend, or any audio or video file by its URL." title="Message">
+        <Picker onValueChange={setClipId} options={OPTIONS} value={clip?.id ?? ''} />
         <SearchBar
           onChangeText={setCustomUrl}
           placeholder="https://…/radio.mp3"
@@ -143,7 +143,19 @@ export const LabScreen = () => {
           ) : null}
           <Box bg="surface.primary" borderRadius="large" p="s16">
             {transcript.text ? (
-              <Karaoke transcript={transcript} variant="headline" />
+              <Box gap="s8">
+                <TranscriptText
+                  onWordPress={word => setPressed(word)}
+                  style={{fontSize: 17, lineHeight: 24}}
+                  transcript={transcript}
+                  upcomingWordStyle={{color: theme.color('content.primary')}}
+                />
+                <Caption color="content.tertiary">
+                  {pressed
+                    ? `${pressed.text} · ${seconds(pressed.start)} to ${seconds(pressed.end)}`
+                    : 'Tap a word for its time'}
+                </Caption>
+              </Box>
             ) : (
               <RnText color="content.tertiary">No words yet.</RnText>
             )}

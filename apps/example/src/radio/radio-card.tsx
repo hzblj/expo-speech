@@ -3,8 +3,7 @@ import {Box, Image, Pressable, RnIcon, RnText, Skeleton} from '@hzblj/kara-ui'
 import {type AudioPlayer, useAudioPlayerStatus} from 'expo-audio'
 import {memo} from 'react'
 
-import {teamColor} from '../f1/openf1'
-import type {RadioClip} from '../f1/radio-clips'
+import {type RadioClip, teamColor} from '../f1/radio'
 import {Caption, formatDuration, Karaoke, WordTrack} from '../ui/karaoke'
 
 const time = (date: Date) =>
@@ -32,13 +31,7 @@ const NowPlaying = ({
 
   return (
     <Box gap="s12">
-      <Karaoke
-        onWordPress={word => player.seekTo(word.start)}
-        playing={status.playing}
-        transcript={transcript}
-        variant="headline"
-        wordIndex={wordIndex}
-      />
+      <Karaoke playing={status.playing} transcript={transcript} variant="headline" wordIndex={wordIndex} />
       <WordTrack duration={status.duration || transcript.duration || 0} time={getTime()} words={transcript.words} />
     </Box>
   )

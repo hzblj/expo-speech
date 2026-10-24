@@ -204,7 +204,7 @@ Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`,
 
 ## Example
 
-`apps/example` in the [repository](https://github.com/hzblj/expo-speech) transcribes the latest Formula 1 weekend's team radio (from [OpenF1](https://openf1.org)) on the device, and plays it back with its words lit.
+`apps/example` in the [repository](https://github.com/hzblj/expo-speech) transcribes a Formula 1 weekend's team radio (captured from [OpenF1](https://openf1.org)) on the device, and plays it back with its words lit.
 
 ## License
 

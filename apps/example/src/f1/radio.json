@@ -1,0 +1,428 @@
+{
+  "drivers": [
+    {
+      "broadcast_name": "M VERSTAPPEN",
+      "driver_number": 1,
+      "first_name": "Max",
+      "full_name": "Max VERSTAPPEN",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/M/MAXVER01_Max_Verstappen/maxver01.png.transform/1col/image.png",
+      "last_name": "Verstappen",
+      "name_acronym": "VER",
+      "team_colour": "4781D7",
+      "team_name": "Red Bull Racing"
+    },
+    {
+      "broadcast_name": "L NORRIS",
+      "driver_number": 4,
+      "first_name": "Lando",
+      "full_name": "Lando NORRIS",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/L/LANNOR01_Lando_Norris/lannor01.png.transform/1col/image.png",
+      "last_name": "Norris",
+      "name_acronym": "NOR",
+      "team_colour": "F47600",
+      "team_name": "McLaren"
+    },
+    {
+      "broadcast_name": "G BORTOLETO",
+      "driver_number": 5,
+      "first_name": "Gabriel",
+      "full_name": "Gabriel BORTOLETO",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/G/GABBOR01_Gabriel_Bortoleto/gabbor01.png.transform/1col/image.png",
+      "last_name": "Bortoleto",
+      "name_acronym": "BOR",
+      "team_colour": "01C00E",
+      "team_name": "Kick Sauber"
+    },
+    {
+      "broadcast_name": "I HADJAR",
+      "driver_number": 6,
+      "first_name": "Isack",
+      "full_name": "Isack HADJAR",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/I/ISAHAD01_Isack_Hadjar/isahad01.png.transform/1col/image.png",
+      "last_name": "Hadjar",
+      "name_acronym": "HAD",
+      "team_colour": "6C98FF",
+      "team_name": "Racing Bulls"
+    },
+    {
+      "broadcast_name": "P GASLY",
+      "driver_number": 10,
+      "first_name": "Pierre",
+      "full_name": "Pierre GASLY",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/P/PIEGAS01_Pierre_Gasly/piegas01.png.transform/1col/image.png",
+      "last_name": "Gasly",
+      "name_acronym": "GAS",
+      "team_colour": "00A1E8",
+      "team_name": "Alpine"
+    },
+    {
+      "broadcast_name": "K ANTONELLI",
+      "driver_number": 12,
+      "first_name": "Kimi",
+      "full_name": "Kimi ANTONELLI",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/A/ANDANT01_Andrea%20Kimi_Antonelli/andant01.png.transform/1col/image.png",
+      "last_name": "Antonelli",
+      "name_acronym": "ANT",
+      "team_colour": "00D7B6",
+      "team_name": "Mercedes"
+    },
+    {
+      "broadcast_name": "F ALONSO",
+      "driver_number": 14,
+      "first_name": "Fernando",
+      "full_name": "Fernando ALONSO",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/F/FERALO01_Fernando_Alonso/feralo01.png.transform/1col/image.png",
+      "last_name": "Alonso",
+      "name_acronym": "ALO",
+      "team_colour": "229971",
+      "team_name": "Aston Martin"
+    },
+    {
+      "broadcast_name": "C LECLERC",
+      "driver_number": 16,
+      "first_name": "Charles",
+      "full_name": "Charles LECLERC",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/C/CHALEC01_Charles_Leclerc/chalec01.png.transform/1col/image.png",
+      "last_name": "Leclerc",
+      "name_acronym": "LEC",
+      "team_colour": "ED1131",
+      "team_name": "Ferrari"
+    },
+    {
+      "broadcast_name": "L STROLL",
+      "driver_number": 18,
+      "first_name": "Lance",
+      "full_name": "Lance STROLL",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/L/LANSTR01_Lance_Stroll/lanstr01.png.transform/1col/image.png",
+      "last_name": "Stroll",
+      "name_acronym": "STR",
+      "team_colour": "229971",
+      "team_name": "Aston Martin"
+    },
+    {
+      "broadcast_name": "Y TSUNODA",
+      "driver_number": 22,
+      "first_name": "Yuki",
+      "full_name": "Yuki TSUNODA",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/Y/YUKTSU01_Yuki_Tsunoda/yuktsu01.png.transform/1col/image.png",
+      "last_name": "Tsunoda",
+      "name_acronym": "TSU",
+      "team_colour": "4781D7",
+      "team_name": "Red Bull Racing"
+    },
+    {
+      "broadcast_name": "A ALBON",
+      "driver_number": 23,
+      "first_name": "Alexander",
+      "full_name": "Alexander ALBON",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/A/ALEALB01_Alexander_Albon/alealb01.png.transform/1col/image.png",
+      "last_name": "Albon",
+      "name_acronym": "ALB",
+      "team_colour": "1868DB",
+      "team_name": "Williams"
+    },
+    {
+      "broadcast_name": "N HULKENBERG",
+      "driver_number": 27,
+      "first_name": "Nico",
+      "full_name": "Nico HULKENBERG",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/N/NICHUL01_Nico_Hulkenberg/nichul01.png.transform/1col/image.png",
+      "last_name": "Hulkenberg",
+      "name_acronym": "HUL",
+      "team_colour": "01C00E",
+      "team_name": "Kick Sauber"
+    },
+    {
+      "broadcast_name": "L LAWSON",
+      "driver_number": 30,
+      "first_name": "Liam",
+      "full_name": "Liam LAWSON",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/L/LIALAW01_Liam_Lawson/lialaw01.png.transform/1col/image.png",
+      "last_name": "Lawson",
+      "name_acronym": "LAW",
+      "team_colour": "6C98FF",
+      "team_name": "Racing Bulls"
+    },
+    {
+      "broadcast_name": "E OCON",
+      "driver_number": 31,
+      "first_name": "Esteban",
+      "full_name": "Esteban OCON",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/E/ESTOCO01_Esteban_Ocon/estoco01.png.transform/1col/image.png",
+      "last_name": "Ocon",
+      "name_acronym": "OCO",
+      "team_colour": "9C9FA2",
+      "team_name": "Haas F1 Team"
+    },
+    {
+      "broadcast_name": "F COLAPINTO",
+      "driver_number": 43,
+      "first_name": "Franco",
+      "full_name": "Franco COLAPINTO",
+      "headshot_url": null,
+      "last_name": "Colapinto",
+      "name_acronym": "COL",
+      "team_colour": "00A1E8",
+      "team_name": "Alpine"
+    },
+    {
+      "broadcast_name": "L HAMILTON",
+      "driver_number": 44,
+      "first_name": "Lewis",
+      "full_name": "Lewis HAMILTON",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/L/LEWHAM01_Lewis_Hamilton/lewham01.png.transform/1col/image.png",
+      "last_name": "Hamilton",
+      "name_acronym": "HAM",
+      "team_colour": "ED1131",
+      "team_name": "Ferrari"
+    },
+    {
+      "broadcast_name": "C SAINZ",
+      "driver_number": 55,
+      "first_name": "Carlos",
+      "full_name": "Carlos SAINZ",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/C/CARSAI01_Carlos_Sainz/carsai01.png.transform/1col/image.png",
+      "last_name": "Sainz",
+      "name_acronym": "SAI",
+      "team_colour": "1868DB",
+      "team_name": "Williams"
+    },
+    {
+      "broadcast_name": "G RUSSELL",
+      "driver_number": 63,
+      "first_name": "George",
+      "full_name": "George RUSSELL",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/G/GEORUS01_George_Russell/georus01.png.transform/1col/image.png",
+      "last_name": "Russell",
+      "name_acronym": "RUS",
+      "team_colour": "00D7B6",
+      "team_name": "Mercedes"
+    },
+    {
+      "broadcast_name": "O PIASTRI",
+      "driver_number": 81,
+      "first_name": "Oscar",
+      "full_name": "Oscar PIASTRI",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/O/OSCPIA01_Oscar_Piastri/oscpia01.png.transform/1col/image.png",
+      "last_name": "Piastri",
+      "name_acronym": "PIA",
+      "team_colour": "F47600",
+      "team_name": "McLaren"
+    },
+    {
+      "broadcast_name": "O BEARMAN",
+      "driver_number": 87,
+      "first_name": "Oliver",
+      "full_name": "Oliver BEARMAN",
+      "headshot_url": "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/O/OLIBEA01_Oliver_Bearman/olibea01.png.transform/1col/image.png",
+      "last_name": "Bearman",
+      "name_acronym": "BEA",
+      "team_colour": "9C9FA2",
+      "team_name": "Haas F1 Team"
+    }
+  ],
+  "meeting": {
+    "circuit_short_name": "Yas Marina Circuit",
+    "country_code": "UAE",
+    "date_start": "2025-12-05T09:30:00+00:00",
+    "meeting_key": 1276,
+    "meeting_name": "Abu Dhabi Grand Prix",
+    "year": 2025
+  },
+  "sessions": [
+    {
+      "date_start": "2025-12-07T13:00:00+00:00",
+      "messages": [
+        {
+          "date": "2025-12-07T14:33:14.515000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/MAXVER01_1_20251207_183223.mp3"
+        },
+        {
+          "date": "2025-12-07T14:32:13.730000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_183123.mp3"
+        },
+        {
+          "date": "2025-12-07T14:25:01.949000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_182444.mp3"
+        },
+        {
+          "date": "2025-12-07T14:19:27.216000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_181844.mp3"
+        },
+        {
+          "date": "2025-12-07T14:13:51.813000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/MAXVER01_1_20251207_181313.mp3"
+        },
+        {
+          "date": "2025-12-07T14:09:48.555000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_180918.mp3"
+        },
+        {
+          "date": "2025-12-07T14:08:15.051000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/MAXVER01_1_20251207_180801.mp3"
+        },
+        {
+          "date": "2025-12-07T14:06:12.869000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_180601.mp3"
+        },
+        {
+          "date": "2025-12-07T13:57:33.460000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_175717.mp3"
+        },
+        {
+          "date": "2025-12-07T13:55:30.889000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_175455.mp3"
+        },
+        {
+          "date": "2025-12-07T13:54:00.427000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/MAXVER01_1_20251207_175342.mp3"
+        },
+        {
+          "date": "2025-12-07T13:50:25.114000+00:00",
+          "driver_number": 22,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/YUKTSU01_22_20251207_175006.mp3"
+        },
+        {
+          "date": "2025-12-07T13:38:42.949000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_173821.mp3"
+        },
+        {
+          "date": "2025-12-07T13:34:38.492000+00:00",
+          "driver_number": 22,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/YUKTSU01_22_20251207_173426.mp3"
+        },
+        {
+          "date": "2025-12-07T13:30:05.796000+00:00",
+          "driver_number": 63,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/GEORUS01_63_20251207_172929.mp3"
+        },
+        {
+          "date": "2025-12-07T13:28:31.934000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_172810.mp3"
+        },
+        {
+          "date": "2025-12-07T13:27:00.276000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_172651.mp3"
+        },
+        {
+          "date": "2025-12-07T13:14:47.816000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/OSCPIA01_81_20251207_171436.mp3"
+        },
+        {
+          "date": "2025-12-07T13:12:42.442000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/MAXVER01_1_20251207_171228.mp3"
+        },
+        {
+          "date": "2025-12-07T13:09:39.067000+00:00",
+          "driver_number": 4,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/LANNOR01_4_20251207_170931.mp3"
+        },
+        {
+          "date": "2025-12-07T12:55:26.617000+00:00",
+          "driver_number": 5,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/GABBOR01_5_20251207_165505.mp3"
+        },
+        {
+          "date": "2025-12-07T12:24:28.178000+00:00",
+          "driver_number": 63,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-07_Race/TeamRadio/GEORUS01_63_20251207_162402.mp3"
+        }
+      ],
+      "session_key": 9839,
+      "session_name": "Race"
+    },
+    {
+      "date_start": "2025-12-06T14:00:00+00:00",
+      "messages": [
+        {
+          "date": "2025-12-06T15:08:22.160000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/MAXVER01_1_20251206_191052.mp3"
+        },
+        {
+          "date": "2025-12-06T15:08:22.160000+00:00",
+          "driver_number": 14,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/FERALO01_14_20251206_191414.mp3"
+        },
+        {
+          "date": "2025-12-06T15:08:22.160000+00:00",
+          "driver_number": 5,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/GABBOR01_5_20251206_191438.mp3"
+        },
+        {
+          "date": "2025-12-06T15:02:46.167000+00:00",
+          "driver_number": 81,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/OSCPIA01_81_20251206_190214.mp3"
+        },
+        {
+          "date": "2025-12-06T15:01:44.999000+00:00",
+          "driver_number": 1,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/MAXVER01_1_20251206_190128.mp3"
+        },
+        {
+          "date": "2025-12-06T14:56:39.764000+00:00",
+          "driver_number": 63,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/GEORUS01_63_20251206_185622.mp3"
+        },
+        {
+          "date": "2025-12-06T14:55:38.563000+00:00",
+          "driver_number": 22,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/YUKTSU01_22_20251206_185520.mp3"
+        },
+        {
+          "date": "2025-12-06T14:46:30.100000+00:00",
+          "driver_number": 16,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/CHALEC01_16_20251206_184608.mp3"
+        },
+        {
+          "date": "2025-12-06T14:42:56.231000+00:00",
+          "driver_number": 6,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/ISAHAD01_6_20251206_184235.mp3"
+        },
+        {
+          "date": "2025-12-06T14:41:24.440000+00:00",
+          "driver_number": 12,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/ANDANT01_12_20251206_184100.mp3"
+        },
+        {
+          "date": "2025-12-06T14:20:35.528000+00:00",
+          "driver_number": 44,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/LEWHAM01_44_20251206_182017.mp3"
+        },
+        {
+          "date": "2025-12-06T14:11:58.842000+00:00",
+          "driver_number": 30,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/LIALAW01_30_20251206_181144.mp3"
+        },
+        {
+          "date": "2025-12-06T13:55:41.310000+00:00",
+          "driver_number": 22,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/YUKTSU01_22_20251206_175513.mp3"
+        },
+        {
+          "date": "2025-12-06T13:52:39.898000+00:00",
+          "driver_number": 22,
+          "recording_url": "https://livetiming.formula1.com/static/2025/2025-12-07_Abu_Dhabi_Grand_Prix/2025-12-06_Qualifying/TeamRadio/YUKTSU01_22_20251206_175219.mp3"
+        }
+      ],
+      "session_key": 9835,
+      "session_name": "Qualifying"
+    }
+  ]
+}

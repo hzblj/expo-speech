@@ -1,7 +1,7 @@
 import {type SpeechTranscriberOptions, useSpeechTranscriber} from '@hzblj/expo-speech'
 import {useMemo} from 'react'
 
-import type {Driver} from './f1/openf1'
+import type {Driver} from './f1/radio'
 
 /** Pit wall words a general model gets wrong: "box" heard as "bucks", "deg" as "dog". */
 const JARGON = [

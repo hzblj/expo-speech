@@ -126,13 +126,7 @@ export const LiveScreen = () => {
       <Box bg="surface.primary" borderRadius="large" gap="s12" p="s16" style={{minHeight: 160}}>
         <Caption>{recorded ? `Your message · ${formatDuration(transcript.duration)}` : 'Live'}</Caption>
         {transcript.text ? (
-          <Karaoke
-            onWordPress={word => player.seekTo(word.start)}
-            playing={status.playing}
-            transcript={transcript}
-            variant="headline"
-            wordIndex={wordIndex}
-          />
+          <Karaoke playing={status.playing} transcript={transcript} variant="headline" wordIndex={wordIndex} />
         ) : (
           <RnText color="content.tertiary" variant="headline">
             {listening ? 'Go ahead.' : 'Box this lap, box box.'}

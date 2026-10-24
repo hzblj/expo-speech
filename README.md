@@ -32,7 +32,7 @@ const {wordIndex} = useTranscriptPlayback(transcript, player)
 | Path | What lives there |
 | --- | --- |
 | `packages/expo-speech/` | `@hzblj/expo-speech`, the published package: the JavaScript API and hooks, the iOS and Android module, and the config plugin |
-| `apps/example/` | The example app, built from [Kara](https://github.com/hzblj/kara-ui): the latest Formula 1 weekend's team radio from [OpenF1](https://openf1.org), transcribed on the device and played back with its words lit; the pit wall's own radio through the microphone; a lab with every option; the languages and their models |
+| `apps/example/` | The example app, built from [Kara](https://github.com/hzblj/kara-ui): a Formula 1 weekend's team radio (captured from [OpenF1](https://openf1.org)), transcribed on the device and played back with its words lit; the pit wall's own radio through the microphone; a lab with every option; the languages and their models |
 
 ```sh
 yarn                 # install
@@ -49,4 +49,4 @@ yarn changeset       # describe a change for the next release
 
 ## License
 
-MIT © Jan Blazej. The example's Formula 1 data and audio come from OpenF1 and Formula 1 while it runs; none of it is part of this repository.
+MIT © Jan Blazej. The example holds the weekend's names, times and links; the audio and photos stream from Formula 1 while it runs, and none of them are part of this repository.

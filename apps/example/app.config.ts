@@ -26,6 +26,9 @@ export default {
   orientation: 'portrait',
   plugins: [
     'expo-router',
+    // iOS 27's SDK requires the UIScene life cycle, which Expo 57's template lacks: React Native starts in Expo's scene
+    // delegate instead.
+    ['expo-build-properties', {ios: {enableSceneSupport: true}}],
     // The example's icons (Material Symbols): every SVG in assets/icons becomes a native asset on both platforms, and
     // its name a type in native-icons.d.ts.
     ['@hzblj/kara-ui', {icons: {source: './assets/icons'}}],
