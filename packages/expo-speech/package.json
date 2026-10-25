@@ -1,6 +1,6 @@
 {
   "name": "@hzblj/expo-speech",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Speech to text for Expo on the platforms' own Speech APIs: SpeechAnalyzer on iOS 26 (SFSpeechRecognizer before it) and the on-device SpeechRecognizer on Android. Files and the microphone, per-word timing, a transcription queue with a cache, and highlighting while the audio plays.",
   "author": "Jan Blazej",
   "license": "MIT",
