@@ -1,5 +1,11 @@
 # @hzblj/expo-speech
 
+## 0.1.5
+
+### Patch Changes
+
+- [`acb369b`](https://github.com/hzblj/expo-speech/commit/acb369b39e6cb978a73023c81189d280245c9c35) Thanks [@hzblj](https://github.com/hzblj)! - The README shows the example app on iOS and Android.
+
 ## 0.1.4
 
 ### Patch Changes
