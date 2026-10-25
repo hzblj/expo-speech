@@ -5,6 +5,11 @@
 
 Speech to text for Expo on the platforms' own Speech APIs, on the device. Files and the microphone, a time for every word, and highlighting while the audio plays.
 
+<p>
+  <img alt="Team radio played back on iOS, its words lit as they are said" height="560" src="https://raw.githubusercontent.com/hzblj/expo-speech/main/media/ios-playing.png" />
+  <img alt="The same on Android" height="560" src="https://raw.githubusercontent.com/hzblj/expo-speech/main/media/android-playing.png" />
+</p>
+
 - **iOS 26:** `SpeechAnalyzer` with `SpeechTranscriber` (or `DictationTranscriber`), its models installed on demand through `AssetInventory`. Before iOS 26: `SFSpeechRecognizer`.
 - **Android:** the on-device `SpeechRecognizer` (Android 12), files and the microphone streamed to it in a segmented session (Android 13), words timed by `RecognitionPart` (Android 14), language models installed on demand.
 - **Every word timed,** with its place in the text: `transcript.text.slice(...word.range) === word.text`.
