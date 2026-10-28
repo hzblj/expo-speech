@@ -13,7 +13,8 @@ private fun Map<String, Any?>.strings(key: String): List<String> = (this[key] as
 data class TranscriberOptions(
   val locale: String?,
   val mode: String = "transcription",
-  val onDevice: Boolean = true,
+  /** `required`, `preferred` or `off`. */
+  val onDevice: String = "required",
   val contextualStrings: List<String> = emptyList(),
   val punctuation: Boolean = true,
   val volatileResults: Boolean = true,
@@ -49,7 +50,7 @@ data class TranscriberOptions(
   val fingerprint: String
     get() = listOf(
       mode, if (punctuation) "p" else "", if (alternatives) "a" else "", if (maskOffensiveWords == true) "m" else "",
-      if (onDevice) "d" else "", contextualStrings.joinToString("|"), android.recognitionService ?: "",
+      onDevice, contextualStrings.joinToString("|"), android.recognitionService ?: "",
       android.formatting ?: "", android.maxResults?.toString() ?: "",
       if (android.languageDetection) "l" + android.languageDetectionAllowed.joinToString(",") else "",
       android.languageSwitch?.let { it + android.languageSwitchAllowed.joinToString(",") } ?: "",
@@ -57,6 +58,8 @@ data class TranscriberOptions(
     ).joinToString(";")
 
   companion object {
+    private val ON_DEVICE = setOf("required", "preferred", "off")
+
     fun from(map: Map<String, Any?>?): TranscriberOptions {
       val options = map ?: emptyMap()
       val android = options.map("android") ?: emptyMap()
@@ -71,7 +74,7 @@ data class TranscriberOptions(
       return TranscriberOptions(
         locale = options.string("locale"),
         mode = options.string("mode") ?: "transcription",
-        onDevice = options.bool("onDevice") ?: true,
+        onDevice = options.string("onDevice")?.takeIf { it in ON_DEVICE } ?: "required",
         contextualStrings = options.strings("contextualStrings"),
         punctuation = options.bool("punctuation") ?: true,
         volatileResults = options.bool("volatileResults") ?: true,
@@ -130,14 +133,21 @@ data class TranscribeOptions(
 data class ListenOptions(
   val record: Boolean = false,
   val volumeIntervalMillis: Long = 0,
+  val stopAfterSilenceMillis: Long? = null,
+  val stopWithoutSpeechMillis: Long? = null,
+  val voiceProcessing: Boolean = false,
   val silenceMillis: Long? = null
 ) {
   companion object {
     fun from(map: Map<String, Any?>?): ListenOptions {
       val options = map ?: emptyMap()
+      val autoStop = options.map("autoStop")
       return ListenOptions(
         record = options.bool("record") ?: false,
         volumeIntervalMillis = options.number("volumeInterval")?.toLong() ?: 0,
+        stopAfterSilenceMillis = autoStop?.number("afterSilence")?.toLong(),
+        stopWithoutSpeechMillis = autoStop?.number("withoutSpeech")?.toLong(),
+        voiceProcessing = options.bool("voiceProcessing") ?: false,
         silenceMillis = options.map("android")?.number("silenceMillis")?.toLong()
       )
     }

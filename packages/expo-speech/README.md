@@ -16,6 +16,8 @@ Speech to text for Expo on the platforms' own Speech APIs, on the device. Files 
 - **A queue with a cache:** transcriptions run a few at a time, highest priority first; the same audio asked for twice is transcribed once, and a finished transcript comes back at once from disk.
 - **Karaoke playback:** `useTranscriptPlayback` follows an expo-audio or expo-video player word by word, on time, without polling it; `TranscriptText` lights the words.
 - **Subtitles:** `toWebVTT` and `toSRT`.
+- **The microphone:** live results, a recording to play back, `autoStop` once the user stops talking, `pause()` and `resume()`, and echo cancellation on both platforms.
+- **On the device, or the server until the model is there:** `onDevice: 'preferred'` answers on the first run while iOS 26 downloads the model.
 
 This is not text to speech: for speaking, use Expo's own `expo-speech`.
 
@@ -108,6 +110,25 @@ transcription.stop() // finalizes what was heard; `cancel()` drops it
 
 `useTranscription(transcription)` gives the transcript as it is heard (the last segment volatile until the recognizer settles it), the microphone's `level` in dBFS and, with `detectSpeech`, whether someone is `speaking`. With `record`, the audio is kept as a 16 kHz mono WAV file in `transcript.audioUri`, ready to play back with its words lit. One `listen` runs at a time in the app.
 
+For a search field or a single answer, let it stop by itself:
+
+```tsx
+const transcriber = new SpeechTranscriber({locale: 'cs-CZ', mode: 'dictation', onDevice: 'preferred'})
+const transcription = transcriber.listen({autoStop: {afterSilence: 1500, withoutSpeech: 5000}})
+const transcript = await transcription.wait() // once the user stops talking
+```
+
+| Option | Meaning |
+| --- | --- |
+| `autoStop` | Stop as `stop()` does: `afterSilence` milliseconds after the last thing heard, or `withoutSpeech` milliseconds after the microphone opens when nothing has been said. Heard means the transcript changed (punctuation or capitals a result gains as it settles don't count) or, with `detectSpeech`, speech was detected |
+| `record` | Keep the audio as a WAV file in `transcript.audioUri` |
+| `volumeInterval` | Milliseconds between `volume` events |
+| `voiceProcessing` | Echo cancellation and noise suppression, for audio playing while the user speaks. iOS: voice processing. Android 13: the voice communication source with the platform's echo canceler and noise suppressor |
+| `ios.audioSession` | `auto` or `manual` |
+| `android.silenceMillis` | Before Android 13, the silence after which the recognizer ends an utterance |
+
+`pause()` mutes the microphone until `resume()`: the recognizer and the recording get silence, so times keep running and stay in step with the recording, and `autoStop` waits. The state is `paused` meanwhile. Before Android 13 the recognizer's own microphone ends the utterance and starts the next one on `resume()`.
+
 On iOS the audio session is set to play and record while listening and let go of afterwards (`ios.audioSession: 'manual'` leaves it to you). A call that takes the microphone ends the transcription as if stopped: what was heard is final, and `error.code` is `interrupted`. A change of route (AirPods in or out) is followed without a gap.
 
 ## Transcriptions
@@ -116,13 +137,14 @@ On iOS the audio session is set to play and record while listening and let go of
 
 | Member | Meaning |
 | --- | --- |
-| `state` | `queued`, `downloading`, `preparing`, `transcribing`, then `completed`, `cancelled` or `failed` |
+| `state` | `queued`, `downloading`, `preparing`, `transcribing` (or `paused`), then `completed`, `cancelled` or `failed` |
 | `transcript` | What has been recognized so far |
 | `progress` | From 0 to 1, for files |
 | `fromCache` | Answered from the cache, without transcribing |
 | `error` | `{code, message}` once it failed (or ended early) |
 | `wait()` | Resolves with the final transcript; rejects when it fails or is cancelled |
 | `stop()`, `cancel()` | Stop and finalize (the microphone), or drop it |
+| `pause()`, `resume()` | Mute the microphone and hear it again |
 
 Its events: `update` (new final segments and the current volatile one), `stateChange`, `progress` (`installing` a model, `downloading` a file, then `transcribing`), `speech`, `volume` and, on Android 14, `language`.
 
@@ -143,7 +165,7 @@ Shared options apply to both platforms; what only one platform can do is under `
 | --- | --- | --- |
 | `locale` | The device's | A BCP 47 tag, `en-GB`, `cs-CZ` |
 | `mode` | `transcription` | `transcription` for recordings and long audio, `dictation` for speech meant as text (iOS 26: `DictationTranscriber`) |
-| `onDevice` | `true` | Keep the audio on the device. iOS 26 always does. Off, Android may use its default recognizer's service and iOS before 26 Apple's servers |
+| `onDevice` | `required` | Where the audio is recognized; see below |
 | `contextualStrings` | None | Names and jargon the audio is likely to contain. Honoured by dictation on iOS 26, by `SFSpeechRecognizer`, and by Android 13's biasing |
 | `punctuation` | `true` | Punctuation and capitals |
 | `volatileResults` | `true` | Results while the recognizer still revises them |
@@ -173,6 +195,16 @@ Shared options apply to both platforms; what only one platform can do is under `
 | `hidePartialTrailingPunctuation`, `biasingDeviceContext`, `preferOffline`, `maxResults` | Platform's | The `RecognizerIntent` extras of the same names |
 | `extras` | None | Any other `RecognizerIntent` extras, by key |
 | `feedSpeed` | `4` | How many times faster than real time a file goes to the recognizer |
+
+### On the device or not
+
+| `onDevice` | iOS 26 | Before iOS 26 | Android |
+| --- | --- | --- | --- |
+| `required` | The analyzer; a missing model is installed first | On the device, or `locale-unavailable` | The on-device recognizer; a missing model is installed first |
+| `preferred` | The analyzer when its model is installed; until then Apple's servers, while the model installs in the background | On the device where the locale can be, Apple's servers otherwise | The on-device recognizer when its model is installed, the default one otherwise |
+| `off` | The analyzer: iOS 26 runs on the device anyway | Apple's servers | The default recognizer, which may send the audio to its service |
+
+`preferred` answers at once on the first run, without waiting for a model download. On iOS 26 the servers are `SFSpeechRecognizer`'s, which needs the speech recognition permission (`Speech.requestPermissionsAsync({speechRecognition: true})`); without it, or offline, the run waits for the model as `required` does. Android asks the user before downloading a model, so `preferred` never starts a download there: `Speech.installLocaleAsync` does, when the app chooses.
 
 ## Languages and models
 

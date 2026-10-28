@@ -29,6 +29,7 @@ import {Caption} from '../ui/karaoke'
 import {Section} from '../ui/page'
 
 const MODES = ['transcription', 'dictation'] as const
+const ON_DEVICE = ['required', 'preferred', 'off'] as const
 
 /** Every message of the weekend, by session. */
 const CLIPS = SESSIONS.flatMap(session => session.clips)
@@ -53,7 +54,7 @@ export const LabScreen = () => {
   const source = customUrl.trim() || clip?.url
 
   const [mode, setMode] = useState(0)
-  const [onDevice, setOnDevice] = useState(true)
+  const [onDevice, setOnDevice] = useState(0)
   const [punctuation, setPunctuation] = useState(true)
   const [alternatives, setAlternatives] = useState(true)
   const [names, setNames] = useState(true)
@@ -66,7 +67,7 @@ export const LabScreen = () => {
       detectSpeech,
       locale: 'en-GB',
       mode: MODES[mode],
-      onDevice,
+      onDevice: ON_DEVICE[onDevice],
       punctuation,
     }),
     [alternatives, names, detectSpeech, mode, onDevice, punctuation]
@@ -106,14 +107,17 @@ export const LabScreen = () => {
       <Section
         caption={
           Platform.OS === 'ios'
-            ? 'iOS 26 always runs on the device. Driver names count in dictation mode.'
-            : 'Off, the default recognizer may send the audio to its service.'
+            ? "Preferred runs on the device once the model is installed and on Apple's servers until then, while the model downloads. Off is the device anyway on iOS 26."
+            : 'Preferred takes the on-device model when it is installed and the default recognizer otherwise, which may send the audio to its service. Off always takes the default one.'
         }
-        title="Options"
+        title="On the device"
       >
+        <SegmentedControl onChange={setOnDevice} selectedIndex={onDevice} values={['Required', 'Preferred', 'Off']} />
+      </Section>
+
+      <Section caption={Platform.OS === 'ios' ? 'Driver names count in dictation mode.' : undefined} title="Options">
         <Island>
           <VStack bg="surface.primary" borderRadius="large" p="s16" spacing="s12" wide>
-            <Switch label="On the device" onValueChange={setOnDevice} value={onDevice} />
             <Switch label="Punctuation" onValueChange={setPunctuation} value={punctuation} />
             <Switch label="Alternatives" onValueChange={setAlternatives} value={alternatives} />
             <Switch label="Driver names as contextual strings" onValueChange={setNames} value={names} />

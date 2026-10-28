@@ -199,4 +199,39 @@ final class EngineTests: XCTestCase {
     _ = try? await task.value
     // Ending at all is the point: a cancelled run must not hang.
   }
+
+  func testPreferredRunsOnTheAnalyzerOnceItsModelIsInstalled() async throws {
+    guard #available(macOS 26.0, *) else {
+      throw XCTSkip("SpeechAnalyzer needs macOS 26")
+    }
+    var options = TranscriberOptions()
+    options.locale = "en-GB"
+    options.onDevice = .preferred
+
+    let made = try await SpeechEngines.make(options)
+    let engine = try XCTUnwrap(made as? PreferredEngine)
+    try await XCTUnwrap(engine.analyzer).install()
+
+    let chosen = await engine.choose()
+    XCTAssertTrue(chosen is AnalyzerEngine)
+    XCTAssertEqual(engine.localeIdentifier, "en-GB")
+
+    let sink = RecordingSink(locale: engine.localeIdentifier)
+    let reader = try await AudioFileReader(url: try speech("radio", format: "WAVE", extension: "wav"))
+    try await engine.run(.file(reader), sink: sink)
+    XCTAssertTrue(sink.assembler.transcript.text.lowercased().contains("push now"))
+  }
+
+  func testAnAnalyzerAskedForByNameHasNoFallback() async throws {
+    guard #available(macOS 26.0, *) else {
+      throw XCTSkip("SpeechAnalyzer needs macOS 26")
+    }
+    var options = TranscriberOptions()
+    options.locale = "en-GB"
+    options.onDevice = .preferred
+    options.ios.engine = .analyzer
+
+    let engine = try await SpeechEngines.make(options)
+    XCTAssertTrue(engine is AnalyzerEngine)
+  }
 }

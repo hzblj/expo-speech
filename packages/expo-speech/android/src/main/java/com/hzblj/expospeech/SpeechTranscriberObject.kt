@@ -29,7 +29,8 @@ class SpeechTranscriberObject(
   val pending: Int get() = synchronized(lock) { queue.size + running.size }
 
   suspend fun prepare(download: Boolean) {
-    if (download && options.onDevice) {
+    // A download asked for installs the on-device model, also for `preferred`.
+    if (download && options.onDevice != "off" && options.android.recognitionService == null) {
       val locales = SpeechLocales(context)
       if (locales.status(locale, LocaleOptions(options.mode, true)) == "supported") {
         locales.install(locale) {}

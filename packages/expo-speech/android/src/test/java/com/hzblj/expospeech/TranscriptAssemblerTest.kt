@@ -140,10 +140,29 @@ class TranscriptAssemblerTest {
     )
 
     assertEquals("transcription", options.mode)
-    assertTrue(options.onDevice)
+    assertEquals("required", options.onDevice)
     assertEquals("medium", options.detectSpeech)
     assertTrue(options.android.languageDetection)
     assertEquals(listOf("en-GB"), options.android.languageDetectionAllowed)
     assertEquals(1, options.maxConcurrent)
+    assertEquals("preferred", TranscriberOptions.from(mapOf("onDevice" to "preferred")).onDevice)
+    assertEquals("required", TranscriberOptions.from(mapOf("onDevice" to "anywhere")).onDevice)
+  }
+
+  @Test
+  fun listenOptions() {
+    val options = ListenOptions.from(
+      mapOf(
+        "autoStop" to mapOf("afterSilence" to 1500.0, "withoutSpeech" to 5000.0),
+        "voiceProcessing" to true,
+        "android" to mapOf("silenceMillis" to 900.0)
+      )
+    )
+
+    assertEquals(1500L, options.stopAfterSilenceMillis)
+    assertEquals(5000L, options.stopWithoutSpeechMillis)
+    assertTrue(options.voiceProcessing)
+    assertEquals(900L, options.silenceMillis)
+    assertEquals(null, ListenOptions.from(null).stopAfterSilenceMillis)
   }
 }

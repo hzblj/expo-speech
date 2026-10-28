@@ -177,6 +177,14 @@ public final class ExpoSpeechModule: Module {
         transcription.stop()
       }
 
+      Function("pause") { (transcription: TranscriptionObject) in
+        transcription.pause()
+      }
+
+      Function("resume") { (transcription: TranscriptionObject) in
+        transcription.resume()
+      }
+
       Function("cancel") { (transcription: TranscriptionObject) in
         transcription.cancel()
       }

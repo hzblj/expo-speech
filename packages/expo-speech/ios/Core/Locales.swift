@@ -34,7 +34,7 @@ public enum SpeechLocales {
     var transcriber = TranscriberOptions()
     transcriber.locale = locale
     transcriber.mode = options.mode
-    transcriber.onDevice = options.onDevice
+    transcriber.onDevice = options.onDevice ? .required : .off
     return transcriber
   }
 

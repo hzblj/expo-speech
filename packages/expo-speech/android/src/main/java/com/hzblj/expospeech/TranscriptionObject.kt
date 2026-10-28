@@ -3,12 +3,12 @@ package com.hzblj.expospeech
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.sharedobjects.SharedObject
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
@@ -41,7 +41,9 @@ class TranscriptionObject(
   private val waiters = mutableListOf<Promise>()
   private var job: Job? = null
   private var capture: MicrophoneCapture? = null
-  private var recognizerStop: CompletableDeferred<Unit>? = null
+  private var recognizerControl: MutableStateFlow<EngineAudio.RecognizerMicrophone.Control>? = null
+  private var autoStop: AutoStop? = null
+  private var paused = false
   private var cancelRequested = false
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -111,25 +113,37 @@ class TranscriptionObject(
     }
   }
 
-  /** Transcribes the microphone until `stop`. */
+  /** Transcribes the microphone until `stop`, or until `autoStop` says so. */
   fun runMicrophone(options: ListenOptions, engine: AndroidEngine, recordings: File) {
+    val stopper = AutoStop.create(options.stopAfterSilenceMillis, options.stopWithoutSpeechMillis) { stop() }
+    synchronized(lock) { autoStop = stopper }
     run {
       setState("transcribing")
       if (android.os.Build.VERSION.SDK_INT >= 33) {
         val recording = if (options.record) File(recordings, "${UUID.randomUUID()}.wav") else null
-        val microphone = MicrophoneCapture(recording, options.volumeIntervalMillis) { level ->
+        val microphone = MicrophoneCapture(
+          recording, options.volumeIntervalMillis, options.voiceProcessing, onStarted = { stopper?.start() }
+        ) { level ->
           send("volume", mapOf("level" to level))
         }
         synchronized(lock) {
+          microphone.muted = paused
           capture = microphone
           assembler.audioUri = recording?.let { android.net.Uri.fromFile(it).toString() }
         }
         engine.run(EngineAudio.Stream(feed = { _, write -> microphone.capture(write) }, isFile = false), this)
         synchronized(lock) { assembler.duration = microphone.duration }
       } else {
-        val stopped = CompletableDeferred<Unit>()
-        synchronized(lock) { recognizerStop = stopped }
-        engine.run(EngineAudio.RecognizerMicrophone(stopped), this, options.silenceMillis)
+        val control = MutableStateFlow(
+          if (synchronized(lock) { paused }) {
+            EngineAudio.RecognizerMicrophone.Control.PAUSED
+          } else {
+            EngineAudio.RecognizerMicrophone.Control.LISTENING
+          }
+        )
+        synchronized(lock) { recognizerControl = control }
+        stopper?.start()
+        engine.run(EngineAudio.RecognizerMicrophone(control), this, options.silenceMillis)
       }
       finish(null)
     }
@@ -166,12 +180,40 @@ class TranscriptionObject(
 
   /** Stops listening and finalizes what was heard; for a file, cancels. */
   fun stop() {
-    val (microphone, stopper) = synchronized(lock) { capture to recognizerStop }
-    if (kind == "microphone" && !isSettled && (microphone != null || stopper != null)) {
+    val (microphone, control) = synchronized(lock) { capture to recognizerControl }
+    if (kind == "microphone" && !isSettled && (microphone != null || control != null)) {
       microphone?.stop()
-      stopper?.complete(Unit)
+      control?.value = EngineAudio.RecognizerMicrophone.Control.STOPPED
     } else {
       cancel()
+    }
+  }
+
+  /** The microphone: silence until `resume`, in the state `paused`. Ignored for a file. */
+  fun pause() = setPaused(true)
+
+  fun resume() = setPaused(false)
+
+  private fun setPaused(paused: Boolean) {
+    if (kind != "microphone") return
+    val running = synchronized(lock) {
+      if (isSettledLocked() || this.paused == paused) return
+      this.paused = paused
+      capture?.muted = paused
+      recognizerControl?.let { control ->
+        if (control.value != EngineAudio.RecognizerMicrophone.Control.STOPPED) {
+          control.value = if (paused) {
+            EngineAudio.RecognizerMicrophone.Control.PAUSED
+          } else {
+            EngineAudio.RecognizerMicrophone.Control.LISTENING
+          }
+        }
+      }
+      stateValue == "transcribing" || stateValue == "paused"
+    }
+    synchronized(lock) { autoStop }?.setPaused(paused)
+    if (running) {
+      setState(if (paused) "paused" else "transcribing")
     }
   }
 
@@ -190,18 +232,25 @@ class TranscriptionObject(
 
   // State
 
-  private fun setState(state: String) {
+  /**
+   * `transcribing` and `paused` follow `paused`, read here: a pause that crosses the start, or a late call, still ends
+   * in the right one.
+   */
+  private fun setState(requested: String) {
     val changed = synchronized(lock) {
+      val state = if (requested == "transcribing" || requested == "paused") {
+        if (paused) "paused" else "transcribing"
+      } else {
+        requested
+      }
       if (isSettledLocked() || stateValue == state) {
-        false
+        null
       } else {
         stateValue = state
-        true
+        state
       }
-    }
-    if (changed) {
-      send("stateChange", mapOf("state" to state, "error" to null))
-    }
+    } ?: return
+    send("stateChange", mapOf("state" to changed, "error" to null))
   }
 
   private fun isSettledLocked() = stateValue == "completed" || stateValue == "cancelled" || stateValue == "failed"
@@ -213,6 +262,7 @@ class TranscriptionObject(
       } else {
         stateValue = state
         failureValue = failure
+        autoStop?.cancel()
         val pending = waiters.toList()
         waiters.clear()
         pending to assembler.transcript
@@ -260,10 +310,12 @@ class TranscriptionObject(
       }
       mapOf("segments" to segments.map { it.toMap() }, "volatile" to assembler.currentVolatile?.toMap())
     }
+    synchronized(lock) { autoStop }?.heard(result.text)
     send("update", update)
   }
 
   override fun speech(detected: Boolean, time: Double) {
+    synchronized(lock) { autoStop }?.speech(detected)
     send("speech", mapOf("detected" to detected, "time" to time))
   }
 

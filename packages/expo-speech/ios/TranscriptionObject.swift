@@ -36,7 +36,7 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
   }
 
   enum State: String {
-    case queued, downloading, preparing, transcribing, completed, cancelled, failed
+    case queued, downloading, preparing, transcribing, paused, completed, cancelled, failed
 
     var isSettled: Bool {
       self == .completed || self == .cancelled || self == .failed
@@ -59,6 +59,8 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
   private var waiters: [Promise] = []
   private var task: Task<Void, Never>?
   private var capture: MicrophoneCapture?
+  private var autoStop: AutoStop?
+  private var isPaused = false
   private var cancelRequested = false
 
   /// Called once, when it settles: the transcriber takes it out of its queue.
@@ -128,7 +130,15 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
     capture.onVolume = { [weak self] level in
       self?.emit(event: "volume", payload: ["level": Double(level)])
     }
-    lock.withLock { self.capture = capture }
+    let autoStop = AutoStop(afterSilence: options.stopAfterSilence, withoutSpeech: options.stopWithoutSpeech) {
+      [weak self] in
+      self?.stop()
+    }
+    capture.onStart = { autoStop?.start() }
+    lock.withLock {
+      self.capture = capture
+      self.autoStop = autoStop
+    }
 
     run(engine: engine) { [weak self] in
       self?.lock.withLock { self?.assembler.audioUri = recording?.absoluteString }
@@ -196,6 +206,36 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
     }
   }
 
+  /// The microphone: silence until `resume`, in the state `paused`. Ignored for a file.
+  func pause() {
+    setPaused(true)
+  }
+
+  func resume() {
+    setPaused(false)
+  }
+
+  private func setPaused(_ paused: Bool) {
+    guard kind == .microphone else {
+      return
+    }
+    let changed = lock.withLock { () -> (MicrophoneCapture?, AutoStop?, Bool)? in
+      guard !_state.isSettled, isPaused != paused else {
+        return nil
+      }
+      isPaused = paused
+      return (capture, autoStop, _state == .transcribing || _state == .paused)
+    }
+    guard let (capture, autoStop, running) = changed else {
+      return
+    }
+    capture?.muted = paused
+    autoStop?.setPaused(paused)
+    if running {
+      setState(paused ? .paused : .transcribing)
+    }
+  }
+
   func cancel() {
     let (task, capture, wasQueued) = lock.withLock { () -> (Task<Void, Never>?, MicrophoneCapture?, Bool) in
       cancelRequested = true
@@ -211,16 +251,19 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
 
   // MARK: State
 
-  private func setState(_ state: State) {
-    let changed = lock.withLock { () -> Bool in
+  /// `transcribing` and `paused` follow `isPaused`, read here: a pause that crosses the start, or a late call, still
+  /// ends in the right one.
+  private func setState(_ requested: State) {
+    let changed = lock.withLock { () -> State? in
+      let state = requested == .transcribing || requested == .paused ? (isPaused ? .paused : .transcribing) : requested
       guard !_state.isSettled, _state != state else {
-        return false
+        return nil
       }
       _state = state
-      return true
+      return state
     }
-    if changed {
-      emit(event: "stateChange", payload: ["state": state.rawValue, "error": NSNull()])
+    if let changed {
+      emit(event: "stateChange", payload: ["state": changed.rawValue, "error": NSNull()])
     }
   }
 
@@ -231,6 +274,7 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
       }
       _state = state
       _failure = failure
+      autoStop?.cancel()
       let waiters = self.waiters
       self.waiters = []
       return (waiters, assembler.transcript)
@@ -286,11 +330,13 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
       ]
     }
     if let update {
+      lock.withLock { autoStop }?.heard(result.text)
       emit(event: "update", payload: update)
     }
   }
 
   func engine(detectedSpeech detected: Bool, at time: Double) {
+    lock.withLock { autoStop }?.speech(detected)
     emit(event: "speech", payload: ["detected": detected, "time": time])
   }
 

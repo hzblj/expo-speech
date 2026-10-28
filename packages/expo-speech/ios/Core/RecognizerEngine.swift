@@ -48,20 +48,36 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
     default:
       throw SpeechFailure(.permissionDenied, "Speech recognition is not allowed")
     }
-    if options.onDevice, !recognizer.supportsOnDeviceRecognition {
+    if options.onDevice == .required, !recognizer.supportsOnDeviceRecognition {
       throw SpeechFailure(
         .localeUnavailable,
-        "\(localeIdentifier) cannot be recognized on this device; `onDevice: false` uses Apple's servers")
+        "\(localeIdentifier) cannot be recognized on this device; `onDevice: 'preferred'` uses Apple's servers")
     }
     guard recognizer.isAvailable else {
       throw SpeechFailure(.service, "The speech recognizer is not available right now")
     }
   }
 
+  /// `preferred` stays on the device where the locale can.
+  private var requiresOnDevice: Bool {
+    switch options.onDevice {
+    case .required: return true
+    case .preferred: return recognizer.supportsOnDeviceRecognition
+    case .off: return false
+    }
+  }
+
+  /// Whether it can run now without asking anything: authorized, and the recognizer available (the server needs the
+  /// network). `preferred` on iOS 26 asks before it uses this engine instead of waiting for the analyzer's model.
+  public var isUsable: Bool {
+    SFSpeechRecognizer.authorizationStatus() == .authorized && recognizer.isAvailable
+      && (options.onDevice != .required || recognizer.supportsOnDeviceRecognition)
+  }
+
   private func configure(_ request: SFSpeechRecognitionRequest) {
     request.shouldReportPartialResults = options.volatileResults
     request.contextualStrings = options.contextualStrings
-    request.requiresOnDeviceRecognition = options.onDevice
+    request.requiresOnDeviceRecognition = requiresOnDevice
     request.taskHint = options.ios.taskHint.map(Self.taskHint) ?? (options.mode == .dictation ? .dictation : .unspecified)
     if #available(iOS 16.0, macOS 13.0, *) {
       request.addsPunctuation = options.punctuation

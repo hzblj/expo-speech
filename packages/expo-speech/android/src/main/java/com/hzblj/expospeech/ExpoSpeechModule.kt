@@ -161,6 +161,8 @@ class ExpoSpeechModule : Module() {
       }
 
       Function("stop") { transcription: TranscriptionObject -> transcription.stop() }
+      Function("pause") { transcription: TranscriptionObject -> transcription.pause() }
+      Function("resume") { transcription: TranscriptionObject -> transcription.resume() }
       Function("cancel") { transcription: TranscriptionObject -> transcription.cancel() }
     }
   }

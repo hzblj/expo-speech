@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AudioEffect
+import android.media.audiofx.NoiseSuppressor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -12,14 +15,19 @@ import kotlin.coroutines.coroutineContext
 
 /**
  * The microphone through `AudioRecord`, at the recognizer's 16 kHz mono 16-bit: fed to the recognizer, optionally
- * written to a WAV file and metered. Runs until `stop`.
+ * written to a WAV file and metered. Runs until `stop`. `muted` sends silence in place of what the microphone hears,
+ * so the recognizer, the recording and the times go on without a gap. `voiceProcessing` records from the voice
+ * communication source with the platform's echo canceler and noise suppressor, where the device has them.
  */
 class MicrophoneCapture(
   private val recording: File?,
   private val volumeIntervalMillis: Long,
+  private val voiceProcessing: Boolean = false,
+  private val onStarted: () -> Unit = {},
   private val onVolume: (Double) -> Unit
 ) {
   @Volatile private var stopped = false
+  @Volatile var muted = false
   private var writer: WavWriter? = null
 
   /** Seconds captured. */
@@ -41,7 +49,8 @@ class MicrophoneCapture(
     }
     val record = try {
       AudioRecord(
-        MediaRecorder.AudioSource.VOICE_RECOGNITION, RECOGNIZER_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+        if (voiceProcessing) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION,
+        RECOGNIZER_SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
         AudioFormat.ENCODING_PCM_16BIT, maxOf(minimum, RECOGNIZER_SAMPLE_RATE / 5 * 2)
       )
     } catch (error: SecurityException) {
@@ -55,9 +64,11 @@ class MicrophoneCapture(
     val buffer = ShortArray(RECOGNIZER_SAMPLE_RATE / 10)
     var samples = 0L
     var lastVolume = 0L
+    val effects = if (voiceProcessing) voiceEffects(record.audioSessionId) else emptyList()
     try {
       writer = recording?.let { WavWriter(it) }
       record.startRecording()
+      onStarted()
       while (!stopped && coroutineContext.isActive) {
         val read = record.read(buffer, 0, buffer.size)
         if (read < 0) {
@@ -65,7 +76,7 @@ class MicrophoneCapture(
         }
         if (read == 0) continue
 
-        val chunk = buffer.copyOf(read)
+        val chunk = if (muted) ShortArray(read) else buffer.copyOf(read)
         write(chunk)
         writer?.write(chunk.toLittleEndianBytes())
         samples += read
@@ -80,8 +91,16 @@ class MicrophoneCapture(
     } finally {
       runCatching { record.stop() }
       record.release()
+      effects.forEach { runCatching { it.release() } }
       writer?.close()
       writer = null
     }
   }
+
+  /** The echo canceler and noise suppressor on the recording's session, those the device has. */
+  private fun voiceEffects(session: Int): List<AudioEffect> =
+    listOfNotNull(
+      if (AcousticEchoCanceler.isAvailable()) runCatching { AcousticEchoCanceler.create(session) }.getOrNull() else null,
+      if (NoiseSuppressor.isAvailable()) runCatching { NoiseSuppressor.create(session) }.getOrNull() else null
+    ).onEach { effect -> runCatching { effect.enabled = true } }
 }

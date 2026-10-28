@@ -8,7 +8,8 @@ import Foundation
 /// stream early instead of leaving it silent; `wasInterrupted` tells the two endings apart.
 ///
 /// `stop` may come at any time, from any thread: before `start` (the stream it returns is already over and the
-/// microphone never opens), during it (it tears down once the engine runs), or after.
+/// microphone never opens), during it (it tears down once the engine runs), or after. `muted` sends silence in place of
+/// what the microphone hears, so the stream, the recording and the times go on without a gap.
 public final class MicrophoneCapture: @unchecked Sendable {
   public struct Configuration: Sendable {
     public var recordURL: URL?
@@ -42,9 +43,17 @@ public final class MicrophoneCapture: @unchecked Sendable {
   private var lastVolume = Date.distantPast
   private var observers: [NSObjectProtocol] = []
   private var interrupted = false
+  private var _muted = false
 
   /// The level in dBFS, every `volumeInterval`.
   public var onVolume: (@Sendable (Float) -> Void)?
+  /// Once, when the microphone runs.
+  public var onStart: (@Sendable () -> Void)?
+
+  public var muted: Bool {
+    get { lock.withLock { _muted } }
+    set { lock.withLock { _muted = newValue } }
+  }
 
   public init(_ configuration: Configuration) {
     self.configuration = configuration
@@ -146,6 +155,8 @@ public final class MicrophoneCapture: @unchecked Sendable {
     if stoppedMeanwhile {
       tearDown()
       continuation.finish()
+    } else {
+      onStart?()
     }
     return stream
   }
@@ -190,9 +201,10 @@ public final class MicrophoneCapture: @unchecked Sendable {
   }
 
   private func process(_ input: AVAudioPCMBuffer) {
-    meter(input)
-
-    let (format, converter, continuation) = lock.withLock { (self.format, self.converter, self.continuation) }
+    let (format, converter, continuation, muted) = lock.withLock {
+      (self.format, self.converter, self.continuation, _muted)
+    }
+    meter(input, muted: muted)
 
     guard let format, let converter, let continuation else {
       return
@@ -219,6 +231,13 @@ public final class MicrophoneCapture: @unchecked Sendable {
     guard status != .error, output.frameLength > 0 else {
       return
     }
+    if muted {
+      for buffer in UnsafeMutableAudioBufferListPointer(output.mutableAudioBufferList) {
+        if let data = buffer.mData {
+          memset(data, 0, Int(buffer.mDataByteSize))
+        }
+      }
+    }
 
     let (start, file) = lock.withLock { () -> (CMTime, AVAudioFile?) in
       let start = CMTime(value: frames, timescale: CMTimeScale(format.sampleRate))
@@ -230,7 +249,7 @@ public final class MicrophoneCapture: @unchecked Sendable {
     continuation.yield(AudioChunk(buffer: output, start: start))
   }
 
-  private func meter(_ buffer: AVAudioPCMBuffer) {
+  private func meter(_ buffer: AVAudioPCMBuffer, muted: Bool) {
     guard configuration.volumeInterval > 0, let onVolume, let channel = buffer.floatChannelData?[0] else {
       return
     }
@@ -244,6 +263,10 @@ public final class MicrophoneCapture: @unchecked Sendable {
       return true
     }
     guard due else {
+      return
+    }
+    if muted {
+      onVolume(-160)
       return
     }
 

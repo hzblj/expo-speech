@@ -224,6 +224,20 @@ public final class AnalyzerEngine: SpeechEngine, @unchecked Sendable {
     }
   }
 
+  /// Whether the models are on the device, so a run starts without a download.
+  public var isInstalled: Bool {
+    get async {
+      let (transcriber, detector) = makeModules()
+      return await AssetInventory.status(forModules: [transcriber.module] + (detector.map { [$0] } ?? [])) == .installed
+    }
+  }
+
+  /// Downloads the models when they are missing, without loading them.
+  public func install() async throws {
+    let (transcriber, detector) = makeModules()
+    try await Self.ensureAssets(for: [transcriber.module] + (detector.map { [$0] } ?? []), download: true, sink: nil)
+  }
+
   public func prepare(download: Bool, sink: EngineSink?) async throws {
     let (transcriber, detector) = makeModules()
     let modules = [transcriber.module] + (detector.map { [$0] } ?? [])

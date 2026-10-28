@@ -35,6 +35,20 @@ operations per text ("Text tree size exceeded the limit"), which a span per styl
 it, measured on macOS 26), so `requestPermissionsAsync` asks for it only where that engine runs unless told to; its
 system prompt says the audio goes to Apple, which on iOS 26 it doesn't.
 
+**The microphone.** `autoStop` is `AutoStop` (Swift and Kotlin, the same rules, the same tests): it fires once, after
+silence following the last change of the text (letters and digits only, so a result that only gains punctuation as it
+settles is not speech) or of `speech` events, or after a wait with nothing heard; never while speech is detected or
+while paused. Its wait for speech starts when the microphone opens (`onStart` / `onStarted`), not at `listen`, so a
+model download does not count. `pause()` mutes rather than stops: `MicrophoneCapture` sends zeros, so the recognizer,
+the recording and the times go on without a gap, and no session has to end and start again.
+
+**`onDevice` is resolved per run.** `required` installs a missing model first, `off` lets the platform decide.
+`preferred`: iOS 26 is `PreferredEngine`, the analyzer once `AssetInventory` says installed, until then
+`RecognizerEngine` (Apple's servers) while the model installs in the background; only when the recognizer is usable
+(authorized, available), otherwise it waits for the model like `required`. A locale the analyzer has no model for at
+all always goes to the recognizer. Android takes the on-device recognizer when its model is installed and the default
+one otherwise, and never starts a download itself: `triggerModelDownload` shows the user a dialog.
+
 **Playback is JavaScript only.** `PlaybackFollower` (`src/playback.ts`) dead-reckons the player's time from its last
 report and wakes exactly at the next word: no polling, no dependency on expo-audio (anything with `currentTime`,
 `playing` and the events expo-audio or expo-video send works).
@@ -98,8 +112,10 @@ report and wakes exactly at the next word: no polling, no dependency on expo-aud
   - Confidence: the on-device recognizer reports 0 for everything, read as unknown.
 - **`AudioDecoder`**: `MediaExtractor` and `MediaCodec` to PCM, then `Resampler` (mixdown, windowed-sinc low-pass,
   linear interpolation) to 16 kHz mono. One decoder per feed, so a retried session starts the file over.
-- **`MicrophoneCapture`**: `AudioRecord` (VOICE_RECOGNITION) into the same pipe, a WAV writer and a meter. Before
-  Android 13 the recognizer's own microphone runs instead, restarted after each utterance until `stop`.
+- **`MicrophoneCapture`**: `AudioRecord` (VOICE_RECOGNITION) into the same pipe, a WAV writer and a meter. With
+  `voiceProcessing`, VOICE_COMMUNICATION with `AcousticEchoCanceler` and `NoiseSuppressor` on its session, where the
+  device has them. Before Android 13 the recognizer's own microphone runs instead, restarted after each utterance
+  until `stop`; `RecognizerMicrophone.Control` pauses it between utterances.
 - The library manifest's `<queries>` for `android.speech.RecognitionService` is what lets Android 11+ find the service.
 - JVM tests: `yarn test:android` (needs the example's prebuilt `android/`).
 - Known: a recognizer that reports "no speech" in the middle of a file ends that session as completed (the rest of the

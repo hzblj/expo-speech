@@ -60,6 +60,10 @@ public enum SpeechEngines {
     }
 
     if useAnalyzer, #available(iOS 26.0, macOS 26.0, *) {
+      // An analyzer asked for by name gets no fallback.
+      if options.onDevice == .preferred, options.ios.engine == .auto {
+        return try await PreferredEngine.make(options)
+      }
       return try await AnalyzerEngine.make(options)
     }
     return try RecognizerEngine.make(options)

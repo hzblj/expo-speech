@@ -33,7 +33,7 @@ export const LiveScreen = () => {
   const status = useAudioPlayerStatus(player)
   const playback = useWaveformPlayback(player)
   const {wordIndex} = useTranscriptPlayback(state === 'completed' ? transcript : null, player)
-  const listening = state === 'transcribing' || state === 'preparing' || state === 'queued'
+  const listening = state === 'transcribing' || state === 'paused' || state === 'preparing' || state === 'queued'
   const recorded = state === 'completed' && transcript.audioUri
 
   // The button may be let go while the permission is still being asked: the press decides, not the closure.

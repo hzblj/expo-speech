@@ -75,6 +75,9 @@ export type SpeechEngine =
  */
 export type SpeechMode = 'transcription' | 'dictation'
 
+/** Where the audio is recognized: see `SpeechTranscriberOptions.onDevice`. */
+export type OnDevice = 'required' | 'preferred' | 'off'
+
 export type SpeechTranscriberOptions = {
   /** A BCP 47 tag (`en-GB`, `cs-CZ`). The device's language when unset. */
   locale?: string
@@ -85,11 +88,17 @@ export type SpeechTranscriberOptions = {
    */
   mode?: SpeechMode
   /**
-   * Keep the audio on the device. iOS 26 always does. Before it, a recognizer that cannot fails instead of using
-   * Apple's servers. Android creates the on-device recognizer (Android 12+) instead of the default one.
-   * @default true
+   * Where the audio is recognized.
+   * - `required`: on the device only. A missing model is installed first; a device or locale that cannot fails.
+   * - `preferred`: on the device when the model is there, otherwise on the platform's server for now. iOS 26 installs
+   *   the model in the background for next time; Android asks the user before a download, so it leaves that to
+   *   `installLocaleAsync`. iOS 26 reaches the server through `SFSpeechRecognizer`, which needs the speech
+   *   recognition permission: without it, or offline, it waits for the model as `required` does.
+   * - `off`: the platform decides. Android uses its default recognizer, iOS before 26 Apple's servers, iOS 26 the
+   *   device anyway.
+   * @default 'required'
    */
-  onDevice?: boolean
+  onDevice?: OnDevice
   /**
    * Words and phrases the audio is likely to contain: names, jargon ("Verstappen", "box this lap"). iOS honours them
    * in `dictation` mode and before 26; Android biases towards them from Android 13.
@@ -201,7 +210,7 @@ export type SpeechTranscriberAndroidOptions = {
     /** Android 15: only switch during this many milliseconds after speech starts. */
     initialActiveDurationMillis?: number
   }
-  /** Prefer the offline model when the default recognizer is used (`onDevice: false`). */
+  /** Prefer the offline model when the default recognizer is used (`onDevice` `off`, or `preferred` without the model). */
   preferOffline?: boolean
   /** How many readings the recognizer returns per result. Raised to 5 by `alternatives`. */
   maxResults?: number
@@ -245,6 +254,19 @@ export type ListenOptions = {
    * @default 0
    */
   volumeInterval?: number
+  /**
+   * Stop by itself, as `stop()` does: `afterSilence` milliseconds after the last thing heard, or `withoutSpeech`
+   * milliseconds after the microphone opens when nothing has been said. For a search field or a single answer. Heard
+   * means the transcript changed (so it wants `volatileResults`, the default) or, with `detectSpeech`, speech was
+   * detected. Off by default: listening runs until `stop()`.
+   */
+  autoStop?: {afterSilence?: number; withoutSpeech?: number}
+  /**
+   * Echo cancellation and noise suppression on the microphone, for audio playing while the user speaks. iOS: voice
+   * processing. Android 13: the voice communication source with the platform's echo canceler and noise suppressor.
+   * @default false
+   */
+  voiceProcessing?: boolean
   ios?: {
     /**
      * `auto` sets the audio session to play and record while listening and deactivates it afterwards; `manual`
@@ -252,11 +274,6 @@ export type ListenOptions = {
      * @default 'auto'
      */
     audioSession?: 'auto' | 'manual'
-    /**
-     * Echo cancellation and noise suppression on the microphone (voice processing).
-     * @default false
-     */
-    voiceProcessing?: boolean
   }
   android?: {
     /** Milliseconds of silence after which the recognizer may stop (Android before 13 only; later it never stops). */
@@ -272,6 +289,8 @@ export type TranscriptionState =
   | 'downloading'
   | 'preparing'
   | 'transcribing'
+  /** The microphone, between `pause()` and `resume()`. */
+  | 'paused'
   | 'completed'
   | 'cancelled'
   | 'failed'

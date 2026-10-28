@@ -40,6 +40,13 @@ export declare class Transcription extends SharedObject<TranscriptionEvents> {
   wait(): Promise<Transcript>
   /** Stop listening and finalize what was heard. For a file, the same as `cancel`. */
   stop(): void
+  /**
+   * The microphone: mute it until `resume()`. The recognizer and the recording get silence meanwhile, so times keep
+   * running and stay in step with the recording, and `autoStop` waits. The state is `paused`. Ignored for a file.
+   */
+  pause(): void
+  /** The microphone: hear it again after `pause()`. */
+  resume(): void
   /** Drop it: out of the queue, or stopped where it is without finalizing. */
   cancel(): void
 }

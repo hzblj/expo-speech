@@ -17,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,8 +55,13 @@ sealed interface EngineAudio {
     val duration: Double? = null
   ) : EngineAudio
 
-  /** The recognizer's own microphone, before Android 13: one utterance at a time, restarted until `stop`. */
-  class RecognizerMicrophone(val stopped: CompletableDeferred<Unit>) : EngineAudio
+  /**
+   * The recognizer's own microphone, before Android 13: one utterance at a time, restarted until `stop`. Paused, the
+   * utterance ends and the next waits for `resume`.
+   */
+  class RecognizerMicrophone(val control: MutableStateFlow<Control>) : EngineAudio {
+    enum class Control { LISTENING, PAUSED, STOPPED }
+  }
 }
 
 /**
@@ -65,20 +72,23 @@ sealed interface EngineAudio {
 class AndroidEngine(private val context: Context, val options: TranscriberOptions) {
   val locale: String = options.localeTag
 
+  private val onDeviceAvailable: Boolean
+    get() = Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+
   /** Must run on the main thread, like every call into `SpeechRecognizer`. */
-  private fun createRecognizer(): SpeechRecognizer {
+  private fun createRecognizer(onDevice: Boolean): SpeechRecognizer {
     options.android.recognitionService?.let { name ->
       val component = ComponentName.unflattenFromString(name)
         ?: throw SpeechFailure(SpeechFailure.UNSUPPORTED, "$name is not a component name (package/class)")
       return SpeechRecognizer.createSpeechRecognizer(context, component)
     }
-    if (options.onDevice) {
-      if (Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+    if (onDevice) {
+      if (onDeviceAvailable) {
         return SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
       }
       throw SpeechFailure(
         SpeechFailure.UNSUPPORTED,
-        "This device has no on-device speech recognizer; `onDevice: false` uses the default one, which may send the audio to its service"
+        "This device has no on-device speech recognizer; `onDevice: 'preferred'` uses the default one, which may send the audio to its service"
       )
     }
     if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -89,20 +99,25 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
 
   /** Creates a recognizer and lets it go: fails the way a transcription would, on the main thread. */
   fun check() {
-    createRecognizer().destroy()
+    val onDevice = when (options.onDevice) {
+      "off" -> false
+      "preferred" -> onDeviceAvailable || !SpeechRecognizer.isRecognitionAvailable(context)
+      else -> true
+    }
+    createRecognizer(onDevice).destroy()
   }
 
   private val formattingEnabled: Boolean
     get() = Build.VERSION.SDK_INT >= 33 && options.punctuation
 
-  fun intent(audio: ParcelFileDescriptor?, microphone: Boolean): Intent =
+  fun intent(audio: ParcelFileDescriptor?, microphone: Boolean, onDevice: Boolean): Intent =
     Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
       putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
       putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
       putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
       putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, options.volatileResults)
       putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, options.android.maxResults ?: if (options.alternatives) 5 else 1)
-      (options.android.preferOffline ?: options.onDevice.takeIf { it })?.let {
+      (options.android.preferOffline ?: onDevice.takeIf { it })?.let {
         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, it)
       }
 
@@ -186,11 +201,44 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
   private val modelLock = Mutex()
 
   /**
+   * Whether this run takes the on-device recognizer. `required` does, its model installed first. `preferred` does when
+   * the model is there (Android 12 cannot tell and assumes it is), and otherwise the default recognizer, without a
+   * download, since Android asks the user before one; on a device with no default recognizer it waits for the model.
+   */
+  private suspend fun onDeviceFor(sink: EngineSink): Boolean {
+    if (options.onDevice == "off") {
+      return false
+    }
+    // A named service is used as it is, asked to prefer offline.
+    if (options.android.recognitionService != null) {
+      return true
+    }
+    if (options.onDevice == "preferred" && !modelReady && !hasOnDeviceModel()) {
+      val fallback = withContext(Dispatchers.Main) { SpeechRecognizer.isRecognitionAvailable(context) }
+      if (fallback) return false
+    }
+    ensureModel(sink)
+    return true
+  }
+
+  private suspend fun hasOnDeviceModel(): Boolean {
+    if (!withContext(Dispatchers.Main) { onDeviceAvailable }) return false
+    if (Build.VERSION.SDK_INT < 33) return true
+    val installed = SpeechLocales(context).status(locale, LocaleOptions(options.mode, onDevice = true)) == "installed"
+    if (installed) {
+      // The check's recognizer was just let go of; give the service a moment before the session binds to it.
+      delay(300)
+      modelReady = true
+    }
+    return installed
+  }
+
+  /**
    * Installs the locale's on-device model when it is missing, once per engine, reporting the download as the
    * `installing` phase: the recognizer would fail with ERROR_LANGUAGE_UNAVAILABLE without it.
    */
   private suspend fun ensureModel(sink: EngineSink) {
-    if (modelReady || !options.onDevice || options.android.recognitionService != null || Build.VERSION.SDK_INT < 33) {
+    if (modelReady || options.android.recognitionService != null || Build.VERSION.SDK_INT < 33) {
       return
     }
     modelLock.withLock {
@@ -215,11 +263,11 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
 
   /** Runs until the audio ends. One session at a time in the whole app, the microphone first: see `SessionGate`. */
   suspend fun run(audio: EngineAudio, sink: EngineSink, silenceMillis: Long? = null) {
-    ensureModel(sink)
+    val onDevice = onDeviceFor(sink)
     when (audio) {
-      is EngineAudio.Stream -> runStream(audio, sink)
+      is EngineAudio.Stream -> runStream(audio, sink, onDevice)
       is EngineAudio.RecognizerMicrophone -> SessionGate.use(microphone = true) {
-        runMicrophone(audio, sink, silenceMillis)
+        runMicrophone(audio, sink, silenceMillis, onDevice)
       }
     }
   }
@@ -234,7 +282,7 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
    * most): a service that another client just let go of can disconnect the next one. A file session that makes way
    * for the microphone continues afterwards from the end of its final text.
    */
-  private suspend fun runStream(audio: EngineAudio.Stream, sink: EngineSink) {
+  private suspend fun runStream(audio: EngineAudio.Stream, sink: EngineSink, onDevice: Boolean) {
     if (Build.VERSION.SDK_INT < 33) {
       throw SpeechFailure(SpeechFailure.UNSUPPORTED, "Transcribing audio from a file needs Android 13")
     }
@@ -242,7 +290,7 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     var attempt = 0
     while (true) {
       val resumeAt = try {
-        SessionGate.use(microphone = !audio.isFile) { turn -> streamSession(audio, from, sink, turn) }
+        SessionGate.use(microphone = !audio.isFile) { turn -> streamSession(audio, from, sink, turn, onDevice) }
       } catch (failure: SpeechFailure) {
         if (!failure.retryable || attempt >= 2) throw failure
         attempt += 1
@@ -258,7 +306,8 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     audio: EngineAudio.Stream,
     from: Double,
     sink: EngineSink,
-    turn: SessionGate.Turn
+    turn: SessionGate.Turn,
+    onDevice: Boolean
   ): Double? = coroutineScope {
     val (read, write) = ParcelFileDescriptor.createPipe()
     val output = ParcelFileDescriptor.AutoCloseOutputStream(write)
@@ -328,9 +377,9 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
 
       // Kept as soon as it exists: a cancel during this block must still find it to destroy.
       withContext(Dispatchers.Main) {
-        recognizer = createRecognizer().apply {
+        recognizer = createRecognizer(onDevice).apply {
           setRecognitionListener(listener)
-          startListening(intent(read, microphone = !audio.isFile))
+          startListening(intent(read, microphone = !audio.isFile, onDevice = onDevice))
         }
       }
 
@@ -363,18 +412,28 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
     }
   }
 
-  private suspend fun runMicrophone(audio: EngineAudio.RecognizerMicrophone, sink: EngineSink, silenceMillis: Long?) {
+  private suspend fun runMicrophone(
+    audio: EngineAudio.RecognizerMicrophone,
+    sink: EngineSink,
+    silenceMillis: Long?,
+    onDevice: Boolean
+  ) {
     val started = System.nanoTime()
     val clock = { (System.nanoTime() - started) / 1e9 }
+    val control = audio.control
 
-    while (!audio.stopped.isCompleted) {
+    while (true) {
+      // Paused: the next utterance waits until resumed, or stopped.
+      val now = control.first { it != EngineAudio.RecognizerMicrophone.Control.PAUSED }
+      if (now == EngineAudio.RecognizerMicrophone.Control.STOPPED) break
+
       val done = CompletableDeferred<Unit>()
       val listener = Listener(sink, done, clock, 0.0)
       val recognizer = withContext(Dispatchers.Main) {
-        createRecognizer().apply {
+        createRecognizer(onDevice).apply {
           setRecognitionListener(listener)
           startListening(
-            intent(null, microphone = true).apply {
+            intent(null, microphone = true, onDevice = onDevice).apply {
               silenceMillis?.let {
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, it)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, it)
@@ -384,7 +443,7 @@ class AndroidEngine(private val context: Context, val options: TranscriberOption
         }
       }
       val stopper = kotlinx.coroutines.CoroutineScope(Dispatchers.Main).launch {
-        audio.stopped.await()
+        control.first { it != EngineAudio.RecognizerMicrophone.Control.LISTENING }
         recognizer.stopListening()
       }
       try {

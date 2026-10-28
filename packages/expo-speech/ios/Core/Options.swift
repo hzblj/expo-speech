@@ -3,10 +3,11 @@ import Foundation
 /// `SpeechTranscriberOptions` from `src/types.ts`, decoded from JavaScript. Defaults are the documented ones.
 public struct TranscriberOptions: Decodable, Sendable, Equatable {
   public enum Mode: String, Decodable, Sendable { case transcription, dictation }
+  public enum OnDevice: String, Decodable, Sendable { case required, preferred, off }
 
   public var locale: String?
   public var mode: Mode = .transcription
-  public var onDevice = true
+  public var onDevice: OnDevice = .required
   public var contextualStrings: [String] = []
   public var punctuation = true
   public var volatileResults = true
@@ -65,7 +66,7 @@ public struct TranscriberOptions: Decodable, Sendable, Equatable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     locale = try container.decodeIfPresent(String.self, forKey: .locale)
     mode = try container.decodeIfPresent(Mode.self, forKey: .mode) ?? .transcription
-    onDevice = try container.decodeIfPresent(Bool.self, forKey: .onDevice) ?? true
+    onDevice = try container.decodeIfPresent(OnDevice.self, forKey: .onDevice) ?? .required
     contextualStrings = try container.decodeIfPresent([String].self, forKey: .contextualStrings) ?? []
     punctuation = try container.decodeIfPresent(Bool.self, forKey: .punctuation) ?? true
     volatileResults = try container.decodeIfPresent(Bool.self, forKey: .volatileResults) ?? true
@@ -86,7 +87,7 @@ public struct TranscriberOptions: Decodable, Sendable, Equatable {
     [
       mode.rawValue, punctuation ? "p" : "", alternatives ? "a" : "", maskOffensiveWords == true ? "m" : "",
       ios.engine.rawValue, ios.emoji ? "e" : "", ios.contentHints.sorted().joined(separator: ","),
-      contextualStrings.joined(separator: "|"), onDevice ? "d" : "", ios.taskHint ?? "",
+      contextualStrings.joined(separator: "|"), onDevice.rawValue, ios.taskHint ?? "",
       ios.customLanguageModel.map { "\($0.languageModel)|\($0.vocabulary ?? "")|\($0.weight ?? -1)" } ?? "",
     ].joined(separator: ";")
   }
@@ -127,21 +128,32 @@ public struct TranscribeOptions: Decodable, Sendable {
 public struct ListenOptions: Decodable, Sendable {
   public var record = false
   public var volumeInterval: Double = 0
-  public var audioSession = "auto"
+  /// Seconds; `nil` when off.
+  public var stopAfterSilence: Double?
+  /// Seconds; `nil` when off.
+  public var stopWithoutSpeech: Double?
   public var voiceProcessing = false
+  public var audioSession = "auto"
 
   public init() {}
 
-  enum CodingKeys: String, CodingKey { case record, volumeInterval, ios }
-  enum IOSKeys: String, CodingKey { case audioSession, voiceProcessing }
+  enum CodingKeys: String, CodingKey { case record, volumeInterval, autoStop, voiceProcessing, ios }
+  enum AutoStopKeys: String, CodingKey { case afterSilence, withoutSpeech }
+  enum IOSKeys: String, CodingKey { case audioSession }
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     record = try container.decodeIfPresent(Bool.self, forKey: .record) ?? false
     volumeInterval = try container.decodeIfPresent(Double.self, forKey: .volumeInterval) ?? 0
+    if container.contains(.autoStop),
+      let autoStop = try? container.nestedContainer(keyedBy: AutoStopKeys.self, forKey: .autoStop)
+    {
+      stopAfterSilence = try autoStop.decodeIfPresent(Double.self, forKey: .afterSilence).map { $0 / 1000 }
+      stopWithoutSpeech = try autoStop.decodeIfPresent(Double.self, forKey: .withoutSpeech).map { $0 / 1000 }
+    }
+    voiceProcessing = try container.decodeIfPresent(Bool.self, forKey: .voiceProcessing) ?? false
     if container.contains(.ios), let ios = try? container.nestedContainer(keyedBy: IOSKeys.self, forKey: .ios) {
       audioSession = try ios.decodeIfPresent(String.self, forKey: .audioSession) ?? "auto"
-      voiceProcessing = try ios.decodeIfPresent(Bool.self, forKey: .voiceProcessing) ?? false
     }
   }
 }
