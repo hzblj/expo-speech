@@ -267,6 +267,13 @@ export type ListenOptions = {
    * @default false
    */
   voiceProcessing?: boolean
+  /**
+   * Milliseconds the microphone may take to open: loading the engine and its model, the audio session. When it has
+   * not opened by then, the transcription fails as `start-timeout`, whose message says what it was waiting for. A model
+   * download that keeps moving starts the wait over. `0` waits as long as it takes.
+   * @default 10000
+   */
+  startTimeout?: number
   ios?: {
     /**
      * `auto` sets the audio session to play and record while listening and deactivates it afterwards; `manual`
@@ -287,7 +294,9 @@ export type SpeechSource = string | number | {uri: string; headers?: Record<stri
 export type TranscriptionState =
   | 'queued'
   | 'downloading'
+  /** A file's engine loading, or the microphone opening: listening has not started yet. */
   | 'preparing'
+  /** The microphone: open and heard. */
   | 'transcribing'
   /** The microphone, between `pause()` and `resume()`. */
   | 'paused'
@@ -315,8 +324,13 @@ export type SpeechErrorCode =
   | 'interrupted'
   /** The recognition service failed. */
   | 'service'
-  /** `cancel()`, or the transcriber was released: what `wait()` rejects with. */
+  /** `cancel()`, `stop()` before the microphone opened, or the transcriber was released: what `wait()` rejects with. */
   | 'cancelled'
+  /**
+   * The microphone did not open within `startTimeout`. The message says what it waited for: the engine or its model
+   * loading, a model download that stopped moving, or the microphone itself. Offer to try again, or to type.
+   */
+  | 'start-timeout'
   | 'unknown'
 
 export type SpeechError = {code: SpeechErrorCode; message: string}

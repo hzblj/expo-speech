@@ -134,10 +134,12 @@ public struct ListenOptions: Decodable, Sendable {
   public var stopWithoutSpeech: Double?
   public var voiceProcessing = false
   public var audioSession = "auto"
+  /// Seconds the microphone may take to open; 0 for no limit.
+  public var startTimeout: Double = 10
 
   public init() {}
 
-  enum CodingKeys: String, CodingKey { case record, volumeInterval, autoStop, voiceProcessing, ios }
+  enum CodingKeys: String, CodingKey { case record, volumeInterval, autoStop, voiceProcessing, startTimeout, ios }
   enum AutoStopKeys: String, CodingKey { case afterSilence, withoutSpeech }
   enum IOSKeys: String, CodingKey { case audioSession }
 
@@ -152,6 +154,7 @@ public struct ListenOptions: Decodable, Sendable {
       stopWithoutSpeech = try autoStop.decodeIfPresent(Double.self, forKey: .withoutSpeech).map { $0 / 1000 }
     }
     voiceProcessing = try container.decodeIfPresent(Bool.self, forKey: .voiceProcessing) ?? false
+    startTimeout = try container.decodeIfPresent(Double.self, forKey: .startTimeout).map { max($0, 0) / 1000 } ?? 10
     if container.contains(.ios), let ios = try? container.nestedContainer(keyedBy: IOSKeys.self, forKey: .ios) {
       audioSession = try ios.decodeIfPresent(String.self, forKey: .audioSession) ?? "auto"
     }

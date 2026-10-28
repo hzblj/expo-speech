@@ -38,7 +38,10 @@ export declare class Transcription extends SharedObject<TranscriptionEvents> {
   readonly error: SpeechError | null
   /** Resolves with the final transcript; rejects when the transcription fails or is cancelled. */
   wait(): Promise<Transcript>
-  /** Stop listening and finalize what was heard. For a file, the same as `cancel`. */
+  /**
+   * Stop listening and finalize what was heard. Before the microphone opens (the state is still `preparing`), and for a
+   * file, the same as `cancel`.
+   */
   stop(): void
   /**
    * The microphone: mute it until `resume()`. The recognizer and the recording get silence meanwhile, so times keep
@@ -47,7 +50,10 @@ export declare class Transcription extends SharedObject<TranscriptionEvents> {
   pause(): void
   /** The microphone: hear it again after `pause()`. */
   resume(): void
-  /** Drop it: out of the queue, or stopped where it is without finalizing. */
+  /**
+   * Drop it: out of the queue, or stopped where it is without finalizing. A microphone that has not opened yet is
+   * `cancelled` at once, whatever it was waiting for.
+   */
   cancel(): void
 }
 

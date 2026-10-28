@@ -45,6 +45,12 @@ public final class PreferredEngine: SpeechEngine, @unchecked Sendable {
     guard let analyzer else {
       return recognizer!
     }
+    #if targetEnvironment(simulator)
+      // The Simulator's on-device models hang or fail to load; Apple's servers work there.
+      if let recognizer, recognizer.isUsable {
+        return recognizer
+      }
+    #endif
     if await analyzer.isInstalled {
       return analyzer
     }
@@ -80,6 +86,80 @@ public final class PreferredEngine: SpeechEngine, @unchecked Sendable {
   }
 
   public func run(_ input: EngineInput, sink: EngineSink) async throws {
-    try await choose().run(input, sink: sink)
+    let engine = await choose()
+    guard let analyzer, engine === analyzer, case .microphone(let capture) = input, let recognizer, recognizer.isUsable
+    else {
+      try await engine.run(input, sink: sink)
+      return
+    }
+    try await run(analyzer, fallingBackTo: recognizer, capture: capture, input: input, sink: sink)
+  }
+
+  /// Seconds the analyzer has to open the microphone before the recognizer takes over.
+  static let analyzerStartGrace: Double = 4
+
+  /// The analyzer, unless it fails or has not opened the microphone within `analyzerStartGrace`: loading its model
+  /// can hang (the iOS 27 Simulator, where `AssetInventory` reports the model installed). The recognizer then takes the
+  /// same microphone, which the analyzer never touched; the analyzer's run is cancelled, and its check before
+  /// `capture.start` keeps it from opening the microphone should it ever resume.
+  private func run(
+    _ analyzer: AnalyzerEngine, fallingBackTo recognizer: RecognizerEngine, capture: MicrophoneCapture,
+    input: EngineInput, sink: EngineSink
+  ) async throws {
+    let outcome = RunOutcome()
+    let analyzerRun = Task {
+      do {
+        try await analyzer.run(input, sink: sink)
+        outcome.finish(nil)
+      } catch {
+        outcome.finish(error)
+        throw error
+      }
+    }
+
+    try await withTaskCancellationHandler {
+      let deadline = Date().addingTimeInterval(Self.analyzerStartGrace)
+      while capture.isIdle, !outcome.isFinished, Date() < deadline {
+        try await Task.sleep(nanoseconds: 50_000_000)
+      }
+    } onCancel: {
+      analyzerRun.cancel()
+    }
+
+    let analyzerFailed = outcome.isFinished && outcome.error.map { !($0 is CancellationError) } == true
+    guard capture.isIdle, analyzerFailed || !outcome.isFinished else {
+      try await withTaskCancellationHandler {
+        try await analyzerRun.value
+      } onCancel: {
+        analyzerRun.cancel()
+      }
+      return
+    }
+
+    analyzerRun.cancel()
+    try Task.checkCancellation()
+    try await recognizer.run(input, sink: sink)
+  }
+}
+
+/// How a run that nobody awaits yet ended.
+private final class RunOutcome: @unchecked Sendable {
+  private let lock = NSLock()
+  private var finished = false
+  private var failure: Error?
+
+  var isFinished: Bool {
+    lock.withLock { finished }
+  }
+
+  var error: Error? {
+    lock.withLock { failure }
+  }
+
+  func finish(_ error: Error?) {
+    lock.withLock {
+      finished = true
+      failure = error
+    }
   }
 }

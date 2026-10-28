@@ -67,6 +67,15 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
   private var autoStop: AutoStop?
   private var isPaused = false
   private var cancelRequested = false
+  private var microphoneOpened = false
+  private var startTimeout: Double = 0
+  private var startPhase = StartPhase.engine
+  private var startWatchdog: DispatchWorkItem?
+
+  /// What a microphone that has not opened yet is waiting for, for the `start-timeout` message.
+  private enum StartPhase {
+    case engine, installing
+  }
 
   /// Called once, when it settles: the transcriber takes it out of its queue.
   var onSettled: ((TranscriptionObject) -> Void)?
@@ -145,10 +154,14 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
       [weak self] in
       self?.stop()
     }
-    capture.onStart = { autoStop?.start() }
+    capture.onStart = { [weak self] in
+      autoStop?.start()
+      self?.microphoneDidOpen()
+    }
     lock.withLock {
       self.capture = capture
       self.autoStop = autoStop
+      self.startTimeout = options.startTimeout
     }
 
     run(engine: engine) { [weak self] in
@@ -165,10 +178,17 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
         if lock.withLock({ cancelRequested }) {
           throw CancellationError()
         }
+        if kind == .microphone {
+          setState(.preparing)
+          armStartWatchdog()
+        }
         let engine = try await engine.value
         let input = try await input()
         try Task.checkCancellation()
-        setState(.transcribing)
+        // The microphone is transcribing once it opens (`microphoneDidOpen`).
+        if kind == .file {
+          setState(.transcribing)
+        }
         try await engine.run(input, sink: self)
         stopCapture()
         finish()
@@ -208,9 +228,10 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
     settle(.completed, failure: interrupted ? SpeechFailure(.interrupted, "Another app or a call took the microphone") : nil)
   }
 
-  /// Stops listening and finalizes what was heard; for a file, cancels.
+  /// Stops listening and finalizes what was heard; for a file, or a microphone that has not opened yet, cancels.
   func stop() {
-    if kind == .microphone, let capture = lock.withLock({ self.capture }), !state.isSettled {
+    let capture = lock.withLock { microphoneOpened ? self.capture : nil }
+    if kind == .microphone, let capture, !state.isSettled {
       capture.stop()
     } else {
       cancel()
@@ -247,17 +268,85 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
     }
   }
 
+  /// A microphone that has not opened yet settles at once: what it waits for (a model loading, the audio session) may
+  /// not end soon, and the transcriber's queue must not wait behind it.
   func cancel() {
-    let (task, capture, wasQueued) = lock.withLock { () -> (Task<Void, Never>?, MicrophoneCapture?, Bool) in
+    let (task, capture, settlesNow) = lock.withLock { () -> (Task<Void, Never>?, MicrophoneCapture?, Bool) in
       cancelRequested = true
-      return (self.task, self.capture, _state == .queued && self.task == nil)
-    }
-    if wasQueued {
-      settle(.cancelled, failure: SpeechFailure(.cancelled, "The transcription was cancelled"))
-      return
+      startWatchdog?.cancel()
+      startWatchdog = nil
+      let wasQueued = _state == .queued && self.task == nil
+      let isStarting = kind == .microphone && !microphoneOpened
+      return (self.task, self.capture, wasQueued || isStarting)
     }
     capture?.stop()
     task?.cancel()
+    if settlesNow {
+      settle(.cancelled, failure: SpeechFailure(.cancelled, "The transcription was cancelled"))
+    }
+  }
+
+  // MARK: Start
+
+  private func microphoneDidOpen() {
+    let watchdog = lock.withLock { () -> DispatchWorkItem? in
+      microphoneOpened = true
+      defer { startWatchdog = nil }
+      return startWatchdog
+    }
+    watchdog?.cancel()
+    setState(.transcribing)
+  }
+
+  /// Fails the run as `start-timeout` when the microphone has not opened `startTimeout` seconds from now. Armed when
+  /// the run starts, and again with every step of a model download, so a download that moves is never cut short.
+  private func armStartWatchdog() {
+    let item = DispatchWorkItem { [weak self] in
+      self?.startTimedOut()
+    }
+    let armed = lock.withLock { () -> (Double, DispatchWorkItem?)? in
+      guard kind == .microphone, startTimeout > 0, !microphoneOpened, !_state.isSettled else {
+        return nil
+      }
+      defer { startWatchdog = item }
+      return (startTimeout, startWatchdog)
+    }
+    guard let (timeout, previous) = armed else {
+      return
+    }
+    previous?.cancel()
+    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: item)
+  }
+
+  private func startTimedOut() {
+    let pending = lock.withLock { () -> (Task<Void, Never>?, MicrophoneCapture?, StartPhase, Double)? in
+      guard !microphoneOpened, !_state.isSettled, !cancelRequested else {
+        return nil
+      }
+      cancelRequested = true
+      startWatchdog = nil
+      return (task, capture, startPhase, startTimeout)
+    }
+    guard let (task, capture, phase, timeout) = pending else {
+      return
+    }
+    let opening = capture?.isStarting == true
+    // Settled first: the cancelled task would otherwise settle it as `cancelled`.
+    settle(.failed, failure: Self.startTimeoutFailure(phase: phase, opening: opening, timeout: timeout))
+    capture?.stop()
+    task?.cancel()
+  }
+
+  private static func startTimeoutFailure(phase: StartPhase, opening: Bool, timeout: Double) -> SpeechFailure {
+    let waitedFor =
+      opening
+      ? "the microphone did not open"
+      : phase == .installing ? "the speech model stopped downloading" : "the speech engine did not load"
+    var message = "Listening did not start within \(Int(timeout.rounded())) s: \(waitedFor)."
+    #if targetEnvironment(simulator)
+      message += " The iOS Simulator often cannot run the speech model or reach the Mac's microphone; try a device."
+    #endif
+    return SpeechFailure(.startTimeout, message)
   }
 
   // MARK: State
@@ -354,6 +443,10 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
   func engine(progress fraction: Double, phase: String) {
     if phase == "transcribing" {
       lock.withLock { _progress = fraction }
+    }
+    if phase == "installing", kind == .microphone {
+      lock.withLock { startPhase = .installing }
+      armStartWatchdog()
     }
     emit(event: "progress", payload: ["phase": phase, "fraction": fraction])
   }

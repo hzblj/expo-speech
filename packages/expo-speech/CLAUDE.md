@@ -39,7 +39,11 @@ system prompt says the audio goes to Apple, which on iOS 26 it doesn't.
 silence following the last change of the text (letters and digits only, so a result that only gains punctuation as it
 settles is not speech) or of `speech` events, or after a wait with nothing heard; never while speech is detected or
 while paused. Its wait for speech starts when the microphone opens (`onStart` / `onStarted`), not at `listen`, so a
-model download does not count. `pause()` mutes rather than stops: `MicrophoneCapture` sends zeros, so the recognizer,
+model download does not count. A microphone transcription is `preparing` until the capture's `onStart` /
+`onStarted` (then `transcribing`); before that `stop()` and `cancel()` settle it as `cancelled` at once (the task may be
+stuck in a system call that never returns, and the transcriber's queue waits on the settle), and a watchdog fails it as
+`start-timeout` after `startTimeout` (re-armed by every `installing` progress). Settle before cancelling the task, or
+its `catch` settles it as `cancelled` first. `pause()` mutes rather than stops: `MicrophoneCapture` sends zeros, so the recognizer,
 the recording and the times go on without a gap, and no session has to end and start again.
 
 **Levels for native code.** `LevelMeter` (Swift and Kotlin) turns the microphone into a root mean square per 80 ms;
@@ -51,7 +55,14 @@ transcription it is given without JavaScript.
 **`onDevice` is resolved per run.** `required` installs a missing model first, `off` lets the platform decide.
 `preferred`: iOS 26 is `PreferredEngine`, the analyzer once `AssetInventory` says installed, until then
 `RecognizerEngine` (Apple's servers) while the model installs in the background; only when the recognizer is usable
-(authorized, available), otherwise it waits for the model like `required`. A locale the analyzer has no model for at
+(authorized, available), otherwise it waits for the model like `required`. For the microphone, an analyzer that has not
+opened it within 4 s (`analyzerStartGrace`) or failed before it did hands the same capture to the recognizer: on the
+iOS 27.0 Simulator `AssetInventory` reports the dictation model installed and `SpeechAnalyzer` then hangs before the
+microphone opens, measured 2026-10-28. The capture must still be idle (`isIdle`), and the cancelled analyzer's check
+before `capture.start` keeps it off the microphone should it resume. In the iOS Simulator `preferred` takes the recognizer whenever it is usable,
+and the recognizer does not require on-device recognition there: the Simulator's local speech service hung at load or
+failed with "Failed to initialize recognizer" (`kLSRErrorDomain` 300) in turn the same evening, while Apple's servers
+answered. A locale the analyzer has no model for at
 all always goes to the recognizer. Android takes the on-device recognizer when its model is installed and the default
 one otherwise, and never starts a download itself: `triggerModelDownload` shows the user a dialog.
 

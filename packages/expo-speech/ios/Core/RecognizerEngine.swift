@@ -58,11 +58,17 @@ public final class RecognizerEngine: SpeechEngine, @unchecked Sendable {
     }
   }
 
-  /// `preferred` stays on the device where the locale can.
+  /// `preferred` stays on the device where the locale can, except in the iOS Simulator: its on-device recognizer fails
+  /// to load ("Failed to initialize recognizer", `kLSRErrorDomain` 300) more often than not, and Apple's servers work.
   private var requiresOnDevice: Bool {
     switch options.onDevice {
     case .required: return true
-    case .preferred: return recognizer.supportsOnDeviceRecognition
+    case .preferred:
+      #if targetEnvironment(simulator)
+        return false
+      #else
+        return recognizer.supportsOnDeviceRecognition
+      #endif
     case .off: return false
     }
   }

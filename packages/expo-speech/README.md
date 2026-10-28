@@ -124,8 +124,21 @@ const transcript = await transcription.wait() // once the user stops talking
 | `record` | Keep the audio as a WAV file in `transcript.audioUri` |
 | `volumeInterval` | Milliseconds between `volume` events |
 | `voiceProcessing` | Echo cancellation and noise suppression, for audio playing while the user speaks. iOS: voice processing. Android 13: the voice communication source with the platform's echo canceler and noise suppressor |
+| `startTimeout` | Milliseconds the microphone may take to open (10 000 by default, `0` for no limit). Past it the transcription fails as `start-timeout`. A model download that keeps moving starts the wait over |
 | `ios.audioSession` | `auto` or `manual` |
 | `android.silenceMillis` | Before Android 13, the silence after which the recognizer ends an utterance |
+
+A microphone transcription is `preparing` until the microphone opens and `transcribing` from then on, so a field can show that it is starting. `stop()` or `cancel()` before it opens ends it as `cancelled` at once, whatever it was waiting for. If it does not open within `startTimeout`, it fails as `start-timeout` with a message that says what it waited for, so the UI can offer to try again:
+
+```tsx
+transcription.addListener('stateChange', ({state, error}) => {
+  if (state === 'failed' && error?.code === 'start-timeout') {
+    showToast('Voice input did not start. Try again or type.')
+  }
+})
+```
+
+With `onDevice: 'preferred'` on iOS 26, an analyzer that has not opened the microphone within 4 seconds, or failed before it did, hands it to `SFSpeechRecognizer` when that recognizer can run (authorized and available). In the iOS Simulator, `preferred` uses `SFSpeechRecognizer` with Apple's servers whenever it can, since the Simulator rarely runs the on-device models.
 
 `pause()` mutes the microphone until `resume()`: the recognizer and the recording get silence, so times keep running and stay in step with the recording, and `autoStop` waits. The state is `paused` meanwhile. Before Android 13 the recognizer's own microphone ends the utterance and starts the next one on `resume()`.
 
@@ -152,7 +165,7 @@ On iOS the audio session is set to play and record while listening and let go of
 | `fromCache` | Answered from the cache, without transcribing |
 | `error` | `{code, message}` once it failed (or ended early) |
 | `wait()` | Resolves with the final transcript; rejects when it fails or is cancelled |
-| `stop()`, `cancel()` | Stop and finalize (the microphone), or drop it |
+| `stop()`, `cancel()` | Stop and finalize (the microphone), or drop it. Before the microphone opens, both cancel at once |
 | `pause()`, `resume()` | Mute the microphone and hear it again |
 
 Its events: `update` (new final segments and the current volatile one), `stateChange`, `progress` (`installing` a model, `downloading` a file, then `transcribing`), `speech`, `volume` and, on Android 14, `language`.
@@ -232,7 +245,7 @@ A transcription installs its locale's model by itself when it is missing; `insta
 
 ## Errors
 
-Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service`, `cancelled` or `unknown`. Audio without speech is not an error: it completes with an empty transcript. The iOS Simulator often cannot get or run Apple's speech models (the iOS 26.5 and 27.0 runtimes cannot): there a transcription fails as `unsupported`, and a device is the place to try it. A transcription shared through a `cacheKey` is taken off the queue by `useTranscribe` only when the last component following it unmounts.
+Errors carry a `code`: `permission-denied`, `unsupported`, `locale-unavailable`, `audio`, `network`, `busy`, `interrupted`, `service`, `cancelled`, `start-timeout` (the microphone did not open within `startTimeout`) or `unknown`, and a `message` that says what happened. Audio without speech is not an error: it completes with an empty transcript. The iOS Simulator often cannot get or run Apple's speech models (the iOS 26.5 and 27.0 runtimes cannot): there a transcription fails as `unsupported`, and a device is the place to try it. A transcription shared through a `cacheKey` is taken off the queue by `useTranscribe` only when the last component following it unmounts.
 
 ## Platform behavior
 

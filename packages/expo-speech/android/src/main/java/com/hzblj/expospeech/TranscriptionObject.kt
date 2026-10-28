@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
@@ -49,6 +50,10 @@ class TranscriptionObject(
   private var autoStop: AutoStop? = null
   private var paused = false
   private var cancelRequested = false
+  private var microphoneOpened = false
+  private var startTimeoutMillis = 0L
+  private var installingModel = false
+  private var startWatchdog: Job? = null
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val levelListeners = CopyOnWriteArrayList<DoubleConsumer>()
 
@@ -136,13 +141,21 @@ class TranscriptionObject(
   /** Transcribes the microphone until `stop`, or until `autoStop` says so. */
   fun runMicrophone(options: ListenOptions, engine: AndroidEngine, recordings: File) {
     val stopper = AutoStop.create(options.stopAfterSilenceMillis, options.stopWithoutSpeechMillis) { stop() }
-    synchronized(lock) { autoStop = stopper }
+    synchronized(lock) {
+      autoStop = stopper
+      startTimeoutMillis = options.startTimeoutMillis
+    }
     run {
-      setState("transcribing")
+      setState("preparing")
+      armStartWatchdog()
       if (android.os.Build.VERSION.SDK_INT >= 33) {
         val recording = if (options.record) File(recordings, "${UUID.randomUUID()}.wav") else null
         val microphone = MicrophoneCapture(
-          recording, options.volumeIntervalMillis, options.voiceProcessing, onStarted = { stopper?.start() },
+          recording, options.volumeIntervalMillis, options.voiceProcessing,
+          onStarted = {
+            stopper?.start()
+            microphoneDidOpen()
+          },
           onLevel = ::publishLevel
         ) { level ->
           send("volume", mapOf("level" to level))
@@ -163,6 +176,7 @@ class TranscriptionObject(
           }
         )
         synchronized(lock) { recognizerControl = control }
+        microphoneDidOpen()
         stopper?.start()
         engine.run(EngineAudio.RecognizerMicrophone(control), this, options.silenceMillis)
       }
@@ -199,9 +213,11 @@ class TranscriptionObject(
     settle("completed", null)
   }
 
-  /** Stops listening and finalizes what was heard; for a file, cancels. */
+  /** Stops listening and finalizes what was heard; for a file, or a microphone that has not opened yet, cancels. */
   fun stop() {
-    val (microphone, control) = synchronized(lock) { capture to recognizerControl }
+    val (microphone, control) = synchronized(lock) {
+      if (microphoneOpened) capture to recognizerControl else null to null
+    }
     if (kind == "microphone" && !isSettled && (microphone != null || control != null)) {
       microphone?.stop()
       control?.value = EngineAudio.RecognizerMicrophone.Control.STOPPED
@@ -238,15 +254,68 @@ class TranscriptionObject(
     }
   }
 
+  /**
+   * A microphone that has not opened yet settles at once: what it waits for (a model download, the recognition service)
+   * may not end soon, and the transcriber's queue must not wait behind it.
+   */
   fun cancel() {
-    val (running, wasQueued) = synchronized(lock) {
+    val (running, settlesNow) = synchronized(lock) {
       cancelRequested = true
-      job to (stateValue == "queued" && job == null)
+      startWatchdog?.cancel()
+      startWatchdog = null
+      val wasQueued = stateValue == "queued" && job == null
+      val isStarting = kind == "microphone" && !microphoneOpened
+      job to (wasQueued || isStarting)
     }
-    if (wasQueued) {
+    synchronized(lock) { capture }?.stop()
+    running?.cancel()
+    if (settlesNow) {
       settle("cancelled", SpeechFailure(SpeechFailure.CANCELLED, "The transcription was cancelled"))
-      return
     }
+  }
+
+  // Start
+
+  private fun microphoneDidOpen() {
+    synchronized(lock) {
+      microphoneOpened = true
+      startWatchdog?.cancel()
+      startWatchdog = null
+    }
+    setState("transcribing")
+  }
+
+  /**
+   * Fails the run as `start-timeout` when the microphone has not opened `startTimeoutMillis` from now. Armed when the
+   * run starts, and again with every step of a model download, so a download that moves is never cut short.
+   */
+  private fun armStartWatchdog() {
+    val timeout = synchronized(lock) {
+      if (kind != "microphone" || startTimeoutMillis <= 0 || microphoneOpened || isSettledLocked()) return
+      startWatchdog?.cancel()
+      startTimeoutMillis
+    }
+    val watchdog = scope.launch {
+      delay(timeout)
+      startTimedOut()
+    }
+    synchronized(lock) { startWatchdog = watchdog }
+  }
+
+  private fun startTimedOut() {
+    val pending = synchronized(lock) {
+      if (microphoneOpened || isSettledLocked() || cancelRequested) return
+      cancelRequested = true
+      startWatchdog = null
+      Triple(job, startTimeoutMillis, installingModel)
+    }
+    val (running, timeout, installing) = pending
+    val waitedFor = if (installing) "the speech model stopped downloading" else "the speech recognizer did not start"
+    // Settled first: the cancelled job would otherwise settle it as `cancelled`.
+    settle(
+      "failed",
+      SpeechFailure(SpeechFailure.START_TIMEOUT, "Listening did not start within ${(timeout + 500) / 1000} s: $waitedFor.")
+    )
     synchronized(lock) { capture }?.stop()
     running?.cancel()
   }
@@ -343,6 +412,10 @@ class TranscriptionObject(
   override fun progress(fraction: Double, phase: String) {
     if (phase == "transcribing") {
       synchronized(lock) { progressValue = fraction }
+    }
+    if (phase == "installing" && kind == "microphone") {
+      synchronized(lock) { installingModel = true }
+      armStartWatchdog()
     }
     send("progress", mapOf("phase" to phase, "fraction" to fraction))
   }

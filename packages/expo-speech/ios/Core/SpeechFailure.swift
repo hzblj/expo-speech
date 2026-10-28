@@ -13,6 +13,7 @@ public struct SpeechFailure: Error, LocalizedError, Sendable {
     case interrupted
     case service
     case cancelled
+    case startTimeout = "start-timeout"
     case unknown
   }
 

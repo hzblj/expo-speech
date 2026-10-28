@@ -73,6 +73,16 @@ public final class MicrophoneCapture: @unchecked Sendable {
     lock.withLock { interrupted }
   }
 
+  /// Neither started nor stopped: no engine has asked for the microphone yet.
+  public var isIdle: Bool {
+    lock.withLock { phase == .idle }
+  }
+
+  /// `start` is opening the microphone and has not finished.
+  public var isStarting: Bool {
+    lock.withLock { phase == .starting }
+  }
+
   /// Starts capturing. Chunks come in `format`, timed from the start of the capture.
   public func start(format: AVAudioFormat) throws -> AsyncThrowingStream<AudioChunk, Error> {
     let (stream, continuation) = AsyncThrowingStream<AudioChunk, Error>.makeStream(bufferingPolicy: .unbounded)

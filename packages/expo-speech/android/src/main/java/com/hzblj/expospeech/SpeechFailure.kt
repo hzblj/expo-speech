@@ -24,6 +24,7 @@ class SpeechFailure(
     const val INTERRUPTED = "interrupted"
     const val SERVICE = "service"
     const val CANCELLED = "cancelled"
+    const val START_TIMEOUT = "start-timeout"
     const val UNKNOWN = "unknown"
 
     fun from(error: Throwable): SpeechFailure = when (error) {

@@ -136,7 +136,9 @@ data class ListenOptions(
   val stopAfterSilenceMillis: Long? = null,
   val stopWithoutSpeechMillis: Long? = null,
   val voiceProcessing: Boolean = false,
-  val silenceMillis: Long? = null
+  val silenceMillis: Long? = null,
+  /** How long the microphone may take to open; 0 for no limit. */
+  val startTimeoutMillis: Long = 10_000
 ) {
   companion object {
     fun from(map: Map<String, Any?>?): ListenOptions {
@@ -148,7 +150,8 @@ data class ListenOptions(
         stopAfterSilenceMillis = autoStop?.number("afterSilence")?.toLong(),
         stopWithoutSpeechMillis = autoStop?.number("withoutSpeech")?.toLong(),
         voiceProcessing = options.bool("voiceProcessing") ?: false,
-        silenceMillis = options.map("android")?.number("silenceMillis")?.toLong()
+        silenceMillis = options.map("android")?.number("silenceMillis")?.toLong(),
+        startTimeoutMillis = options.number("startTimeout")?.toLong()?.coerceAtLeast(0) ?: 10_000
       )
     }
   }
