@@ -31,6 +31,11 @@ struct CacheSlot {
 /// results through `EngineSink`, keeps the transcript, and sends `update`, `stateChange`, `progress`, `speech` and
 /// `volume` events.
 final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
+  /// The microphone's level for native code that follows a transcription without JavaScript (expo-waveform's
+  /// `LiveWaveformView`): posted with the transcription as the object every 80 ms of audio, `userInfo["level"]` the
+  /// root mean square as a `Double` from 0 to 1, from the audio thread.
+  static let audioLevel = Notification.Name("expo.audioLevel")
+
   enum Kind: String {
     case file, microphone
   }
@@ -129,6 +134,12 @@ final class TranscriptionObject: SharedObject, EngineSink, @unchecked Sendable {
 
     capture.onVolume = { [weak self] level in
       self?.emit(event: "volume", payload: ["level": Double(level)])
+    }
+    capture.onLevel = { [weak self] level in
+      guard let self else {
+        return
+      }
+      NotificationCenter.default.post(name: Self.audioLevel, object: self, userInfo: ["level": Double(level)])
     }
     let autoStop = AutoStop(afterSilence: options.stopAfterSilence, withoutSpeech: options.stopWithoutSpeech) {
       [weak self] in

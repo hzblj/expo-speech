@@ -44,11 +44,15 @@ public final class MicrophoneCapture: @unchecked Sendable {
   private var observers: [NSObjectProtocol] = []
   private var interrupted = false
   private var _muted = false
+  private var levelMeter: LevelMeter?
 
   /// The level in dBFS, every `volumeInterval`.
   public var onVolume: (@Sendable (Float) -> Void)?
   /// Once, when the microphone runs.
   public var onStart: (@Sendable () -> Void)?
+  /// The root mean square of every `levelInterval` of audio, from 0 to 1 (0 while muted), for a live meter.
+  public var onLevel: (@Sendable (Float) -> Void)?
+  public static let levelInterval = 0.08
 
   public var muted: Bool {
     get { lock.withLock { _muted } }
@@ -205,6 +209,7 @@ public final class MicrophoneCapture: @unchecked Sendable {
       (self.format, self.converter, self.continuation, _muted)
     }
     meter(input, muted: muted)
+    measureLevel(input, muted: muted)
 
     guard let format, let converter, let continuation else {
       return
@@ -247,6 +252,24 @@ public final class MicrophoneCapture: @unchecked Sendable {
 
     try? file?.write(from: output)
     continuation.yield(AudioChunk(buffer: output, start: start))
+  }
+
+  /// Reports each `levelInterval` of audio as it fills. A route change may change the rate, and the stretch with it.
+  private func measureLevel(_ buffer: AVAudioPCMBuffer, muted: Bool) {
+    guard let onLevel, let channel = buffer.floatChannelData?[0] else {
+      return
+    }
+    let frames = Int(buffer.format.sampleRate * Self.levelInterval)
+    let samples = UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
+    let levels = lock.withLock { () -> [Float] in
+      if levelMeter?.frames != frames {
+        levelMeter = LevelMeter(frames: frames)
+      }
+      return levelMeter!.add(samples, muted: muted)
+    }
+    for level in levels {
+      onLevel(level)
+    }
   }
 
   private func meter(_ buffer: AVAudioPCMBuffer, muted: Bool) {

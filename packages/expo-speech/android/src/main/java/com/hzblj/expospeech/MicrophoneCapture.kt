@@ -24,8 +24,14 @@ class MicrophoneCapture(
   private val volumeIntervalMillis: Long,
   private val voiceProcessing: Boolean = false,
   private val onStarted: () -> Unit = {},
+  /** The root mean square of every `LEVEL_INTERVAL_SECONDS` of audio, from 0 to 1 (0 while muted), for a live meter. */
+  private val onLevel: ((Double) -> Unit)? = null,
   private val onVolume: (Double) -> Unit
 ) {
+  companion object {
+    const val LEVEL_INTERVAL_SECONDS = 0.08
+  }
+
   @Volatile private var stopped = false
   @Volatile var muted = false
   private var writer: WavWriter? = null
@@ -64,6 +70,7 @@ class MicrophoneCapture(
     val buffer = ShortArray(RECOGNIZER_SAMPLE_RATE / 10)
     var samples = 0L
     var lastVolume = 0L
+    val levels = LevelMeter((RECOGNIZER_SAMPLE_RATE * LEVEL_INTERVAL_SECONDS).toInt())
     val effects = if (voiceProcessing) voiceEffects(record.audioSessionId) else emptyList()
     try {
       writer = recording?.let { WavWriter(it) }
@@ -77,6 +84,7 @@ class MicrophoneCapture(
         if (read == 0) continue
 
         val chunk = if (muted) ShortArray(read) else buffer.copyOf(read)
+        onLevel?.let { report -> levels.add(chunk).forEach(report) }
         write(chunk)
         writer?.write(chunk.toLittleEndianBytes())
         samples += read

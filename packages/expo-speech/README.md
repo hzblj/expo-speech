@@ -129,6 +129,15 @@ const transcript = await transcription.wait() // once the user stops talking
 
 `pause()` mutes the microphone until `resume()`: the recognizer and the recording get silence, so times keep running and stay in step with the recording, and `autoStop` waits. The state is `paused` meanwhile. Before Android 13 the recognizer's own microphone ends the utterance and starts the next one on `resume()`.
 
+### Native code that follows the microphone
+
+A live meter in native code can follow a transcription without JavaScript, at the audio's own pace: [`@hzblj/expo-waveform`](https://github.com/hzblj/expo-waveform)'s `LiveWaveformView` takes the `Transcription` as its `meter`. The level is the root mean square of every 80 ms of audio, from 0 to 1, and 0 while paused:
+
+- **iOS:** the notification `expo.audioLevel`, posted with the transcription as the object; `userInfo["level"]` is a `Double`.
+- **Android:** `addAudioLevelListener(DoubleConsumer): AutoCloseable` on the transcription, found by name; closing the handle stops it.
+
+Both come on the audio thread.
+
 On iOS the audio session is set to play and record while listening and let go of afterwards (`ios.audioSession: 'manual'` leaves it to you). A call that takes the microphone ends the transcription as if stopped: what was heard is final, and `error.code` is `interrupted`. A change of route (AirPods in or out) is followed without a gap.
 
 ## Transcriptions

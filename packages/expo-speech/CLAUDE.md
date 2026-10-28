@@ -42,6 +42,12 @@ while paused. Its wait for speech starts when the microphone opens (`onStart` / 
 model download does not count. `pause()` mutes rather than stops: `MicrophoneCapture` sends zeros, so the recognizer,
 the recording and the times go on without a gap, and no session has to end and start again.
 
+**Levels for native code.** `LevelMeter` (Swift and Kotlin) turns the microphone into a root mean square per 80 ms;
+iOS posts it as the `expo.audioLevel` notification with the transcription as the object, Android hands it to the
+listeners of `addAudioLevelListener` (`@Keep`: expo-waveform finds it by name). Before Android 13 the recognizer's
+`onRmsChanged` stands in for it. No dependency either way: a meter (expo-waveform's `LiveWaveformView`) follows the
+transcription it is given without JavaScript.
+
 **`onDevice` is resolved per run.** `required` installs a missing model first, `off` lets the platform decide.
 `preferred`: iOS 26 is `PreferredEngine`, the analyzer once `AssetInventory` says installed, until then
 `RecognizerEngine` (Apple's servers) while the model installs in the background; only when the recognizer is usable

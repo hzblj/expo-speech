@@ -1,5 +1,6 @@
 package com.hzblj.expospeech
 
+import androidx.annotation.Keep
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.sharedobjects.SharedObject
@@ -12,6 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.function.DoubleConsumer
+import kotlin.math.pow
 
 /** Where a finished transcript is kept, when the transcription has a `cacheKey`. */
 data class CacheSlot(val key: String, val locale: String, val fingerprint: String)
@@ -46,6 +50,7 @@ class TranscriptionObject(
   private var paused = false
   private var cancelRequested = false
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private val levelListeners = CopyOnWriteArrayList<DoubleConsumer>()
 
   /** Called once, when it settles: the transcriber takes it out of its queue. */
   var onSettled: ((TranscriptionObject) -> Unit)? = null
@@ -57,6 +62,21 @@ class TranscriptionObject(
   val failure: SpeechFailure? get() = synchronized(lock) { failureValue }
   val transcript: Transcript get() = synchronized(lock) { assembler.transcript }
   val isSettled: Boolean get() = state.let { it == "completed" || it == "cancelled" || it == "failed" }
+
+  /**
+   * The microphone's level for native code that follows a transcription without JavaScript (expo-waveform's
+   * `LiveWaveformView`, which finds this method by name): the root mean square from 0 to 1 every 80 ms of audio, on the
+   * capture's thread. Closing the handle stops it.
+   */
+  @Keep
+  fun addAudioLevelListener(listener: DoubleConsumer): AutoCloseable {
+    levelListeners.add(listener)
+    return AutoCloseable { levelListeners.remove(listener) }
+  }
+
+  private fun publishLevel(value: Double) {
+    for (listener in levelListeners) listener.accept(value)
+  }
 
   private fun send(event: String, payload: Map<String, Any?>) {
     appContext?.mainQueue?.launch { emit(event, payload) }
@@ -122,7 +142,8 @@ class TranscriptionObject(
       if (android.os.Build.VERSION.SDK_INT >= 33) {
         val recording = if (options.record) File(recordings, "${UUID.randomUUID()}.wav") else null
         val microphone = MicrophoneCapture(
-          recording, options.volumeIntervalMillis, options.voiceProcessing, onStarted = { stopper?.start() }
+          recording, options.volumeIntervalMillis, options.voiceProcessing, onStarted = { stopper?.start() },
+          onLevel = ::publishLevel
         ) { level ->
           send("volume", mapOf("level" to level))
         }
@@ -327,6 +348,10 @@ class TranscriptionObject(
   }
 
   override fun volume(level: Double) {
+    // Before Android 13 the recognizer's own microphone is the only meter: its dBFS stand in for the levels.
+    if (synchronized(lock) { recognizerControl } != null) {
+      publishLevel(10.0.pow(level / 20))
+    }
     send("volume", mapOf("level" to level))
   }
 
