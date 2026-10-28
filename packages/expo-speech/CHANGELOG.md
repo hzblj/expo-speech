@@ -1,5 +1,11 @@
 # @hzblj/expo-speech
 
+## 0.3.0
+
+### Minor Changes
+
+- [`4c16259`](https://github.com/hzblj/expo-speech/commit/4c162597547d2a694be1a637bf49b29fe9167383) Thanks [@hzblj](https://github.com/hzblj)! - Native code can follow a transcription's microphone without JavaScript: the root mean square of every 80 ms of audio, as the `expo.audioLevel` notification on iOS (the transcription is the object) and through `addAudioLevelListener` on Android. `@hzblj/expo-waveform`'s `LiveWaveformView` draws it live as its `meter`.
+
 ## 0.2.0
 
 ### Minor Changes
