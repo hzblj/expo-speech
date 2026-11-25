@@ -69,18 +69,16 @@
     "test:android": "cd ../../apps/example/android && ./gradlew :hzblj-expo-speech:testDebugUnitTest"
   },
   "peerDependencies": {
-    "expo": ">=57",
-    "expo-modules-core": "*",
+    "expo": ">=58",
     "react": "*",
     "react-native": "*"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
     "@types/react": "~19.2.14",
-    "expo": "~57.0.31",
-    "expo-modules-core": "~57.0.24",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
+    "expo": "~58.0.26",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
     "tsx": "^4.23.15",
     "typescript": "~7.0.2"
   },

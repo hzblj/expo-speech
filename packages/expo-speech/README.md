@@ -27,7 +27,7 @@ This is not text to speech: for speaking, use Expo's own `expo-speech`.
 npx expo install @hzblj/expo-speech
 ```
 
-Requires Expo SDK 57 or newer and a [development build](https://docs.expo.dev/develop/development-builds/introduction/). Expo Go doesn't include this native module.
+Requires Expo SDK 58 or newer and a [development build](https://docs.expo.dev/develop/development-builds/introduction/). Expo Go doesn't include this native module.
 
 Add the config plugin. It sets the iOS usage descriptions and Android's microphone permission:
 

@@ -1,4 +1,4 @@
-import {useReleasingSharedObject} from 'expo-modules-core'
+import {useReleasingSharedObject} from 'expo'
 import {useEffect, useRef, useState} from 'react'
 
 import {ExpoSpeech, type SpeechTranscriber, type Transcription} from './ExpoSpeechModule'
