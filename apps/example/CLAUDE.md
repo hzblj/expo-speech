@@ -27,10 +27,6 @@ from Formula 1 while the app runs; nothing of theirs is committed.
 **Native changes need a rebuild**: `yarn prebuild` (it builds the package's config plugin first), then a native run.
 On the iOS 26.0 simulator `SpeechTranscriber` is unavailable and the package falls back to `DictationTranscriber`.
 
-**iOS 27 needs the scene life cycle.** Xcode 27's SDK asserts at launch on an app without `UIApplicationSceneManifest`,
-which Expo 57's template lacks: `expo-build-properties` with `ios.enableSceneSupport` (in `app.config.ts`) starts React
-Native in Expo's scene delegate instead.
-
 **Captures start playback by link.** The iOS 27 simulator takes no scripted taps (`idb` cannot reach its HID), so
 `speech-example:///?play=1` plays the selected session's second message, with the app in front (a link from outside asks
 first). Status bar at 9:41 (`xcrun simctl status_bar … override`, Android's demo mode), Release builds.

@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.author         = package['author']
   s.homepage       = package['homepage']
   s.license        = package['license']
-  # Expo SDK 57's minimum. SpeechAnalyzer is used from iOS 26, SFSpeechRecognizer before it.
+  # SpeechAnalyzer is used from iOS 26, SFSpeechRecognizer before it.
   s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.9'
   s.source         = { :git => 'https://github.com/hzblj/expo-speech.git', :tag => "@hzblj/expo-speech@#{s.version}" }
